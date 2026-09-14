@@ -1,0 +1,9 @@
+<component name="libraryTable">
+  <library name="CuiPortalApplication">
+    <CLASSES>
+      <root url="jar://$PROJECT_DIR$/dist/CuiPortalApplication.jar!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES />
+  </library>
+</component>

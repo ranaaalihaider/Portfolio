@@ -1,0 +1,67 @@
+// ...existing code...
+
+Manual — Run and Use Project
+===========================
+
+Prerequisites
+- Windows machine, Python 3.8+ installed.
+- Optional: Visual Studio Code (recommended).
+
+1) Setup (recommended: PowerShell)
+- Open a terminal in the project folder:
+  cd "c:\Users\Ranaa Ali Haider\OneDrive\Personal Data\Study\SEM-5\Artificial Intelligence\Mid Project\Final"
+- Create and activate virtual environment:
+  python -m venv venv
+  # PowerShell
+  .\venv\Scripts\Activate.ps1
+  # CMD
+  .\venv\Scripts\activate.bat
+- Upgrade pip (optional):
+  pip install --upgrade pip
+
+2) Install dependencies
+- Run:
+  pip install -r requirements.txt
+
+3) Run the web app
+- Start server:
+  python app.py
+- Open the URL shown in the terminal (usually http://127.0.0.1:5000) in a browser.
+
+4) Using the web UI
+- The UI lists graph files from saved_graphs/.
+- Select:
+  - a graph file,
+  - start node,
+  - end node,
+  - algorithm (e.g., bfs, dfs).
+- Click "Run" to compute and visualize the path and metrics.
+
+5) Programmatic usage (example template)
+- Typical flow:
+  from graph import Graph
+  from algorithms import PathfindingAlgorithms
+  import json
+  with open('saved_graphs/Cities.json') as f:
+      data = json.load(f)
+  graph = Graph(data)        # adapt to Graph constructor in graph.py
+  alg = PathfindingAlgorithms()
+  result = alg.find_path(graph, start='A', end='B', algorithm_name='bfs')
+  print(result)
+
+6) Add or edit graphs
+- Place JSON graph files in saved_graphs/ to make them selectable by the UI.
+- Inspect existing samples: saved_graphs/Cities.json, 20_cities.json, pakistan_cities.json
+
+7) Key files
+- app.py — Flask app and routes
+- algorithms.py — pathfinding implementations
+- graph.py — graph model and loader
+- templates/index.html, static/script.js, static/style.css — UI
+
+8) Troubleshooting
+- "Module not found": ensure venv is activated and requirements installed.
+- Port in use: stop other services using port 5000 or set a different port in app.py.
+- Data errors: open the JSON graph file and check format expected by graph.py.
+
+If something doesn't work, open the specific file (graph.py or algorithms.py) and adapt small example code to the actual API used there.

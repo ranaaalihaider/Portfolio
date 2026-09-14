@@ -1,0 +1,215 @@
+{
+  "cities": {
+    "Islamabad": ["Rawalpindi", "Murree"],
+    "Rawalpindi": ["Attock", "Jhelum"],
+    "Murree": ["Kotli", "Muzaffarabad"],
+    "Attock": ["Peshawar", "Mardan"],
+    "Jhelum": ["Gujrat", "Sargodha"],
+    "Kotli": ["Mirpur", "Bhimber"],
+    "Muzaffarabad": ["Gilgit", "Skardu"],
+    "Peshawar": ["Nowshera", "Charsadda"],
+    "Mardan": ["Swabi", "Malakand"],
+    "Gujrat": ["Gujranwala", "Sialkot"],
+    "Sargodha": ["Faisalabad", "Jhang"],
+    "Mirpur": ["Kotli", "Bhimber"],
+    "Bhimber": ["Kotli", "Mirpur"],
+    "Gilgit": ["Skardu", "Hunza"],
+    "Skardu": ["Gilgit", "Hunza"],
+    "Nowshera": ["Charsadda", "Peshawar"],
+    "Charsadda": ["Nowshera", "Peshawar"],
+    "Swabi": ["Malakand", "Mardan"],
+    "Malakand": ["Swabi", "Mardan"],
+    "Gujranwala": ["Lahore", "Sheikhupura"],
+    "Sialkot": ["Gujranwala", "Narowal"],
+    "Faisalabad": ["Toba Tek Singh", "Jhang"],
+    "Jhang": ["Faisalabad", "Toba Tek Singh"],
+    "Hunza": ["Gilgit", "Skardu"],
+    "Lahore": ["Kasur", "Nankana Sahib"],
+    "Sheikhupura": ["Lahore", "Nankana Sahib"],
+    "Narowal": ["Sialkot", "Gujranwala"],
+    "Toba Tek Singh": ["Faisalabad", "Jhang"],
+    "Kasur": ["Lahore", "Okara"],
+    "Nankana Sahib": ["Lahore", "Sheikhupura"],
+    "Okara": ["Kasur", "Sahiwal"],
+    "Sahiwal": ["Okara", "Pakpattan"],
+    "Pakpattan": ["Sahiwal", "Okara"]
+  },
+  "connections": {
+    "Islamabad": {
+      "Rawalpindi": 15.0,
+      "Murree": 35.0
+    },
+    "Rawalpindi": {
+      "Islamabad": 15.0,
+      "Attock": 45.0,
+      "Jhelum": 60.0
+    },
+    "Murree": {
+      "Islamabad": 35.0,
+      "Kotli": 80.0,
+      "Muzaffarabad": 90.0
+    },
+    "Attock": {
+      "Rawalpindi": 45.0,
+      "Peshawar": 70.0,
+      "Mardan": 85.0
+    },
+    "Jhelum": {
+      "Rawalpindi": 60.0,
+      "Gujrat": 40.0,
+      "Sargodha": 55.0
+    },
+    "Kotli": {
+      "Murree": 80.0,
+      "Mirpur": 25.0,
+      "Bhimber": 30.0
+    },
+    "Muzaffarabad": {
+      "Murree": 90.0,
+      "Gilgit": 120.0,
+      "Skardu": 150.0
+    },
+    "Peshawar": {
+      "Attock": 70.0,
+      "Nowshera": 20.0,
+      "Charsadda": 25.0
+    },
+    "Mardan": {
+      "Attock": 85.0,
+      "Swabi": 30.0,
+      "Malakand": 40.0
+    },
+    "Gujrat": {
+      "Jhelum": 40.0,
+      "Gujranwala": 35.0,
+      "Sialkot": 25.0
+    },
+    "Sargodha": {
+      "Jhelum": 55.0,
+      "Faisalabad": 65.0,
+      "Jhang": 45.0
+    },
+    "Mirpur": {
+      "Kotli": 25.0,
+      "Kotli": 25.0,
+      "Bhimber": 20.0
+    },
+    "Bhimber": {
+      "Kotli": 30.0,
+      "Kotli": 20.0,
+      "Mirpur": 20.0
+    },
+    "Gilgit": {
+      "Muzaffarabad": 120.0,
+      "Skardu": 45.0,
+      "Hunza": 35.0
+    },
+    "Skardu": {
+      "Muzaffarabad": 150.0,
+      "Gilgit": 45.0,
+      "Hunza": 40.0
+    },
+    "Nowshera": {
+      "Peshawar": 20.0,
+      "Charsadda": 15.0,
+      "Peshawar": 20.0
+    },
+    "Charsadda": {
+      "Peshawar": 25.0,
+      "Nowshera": 15.0,
+      "Peshawar": 25.0
+    },
+    "Swabi": {
+      "Mardan": 30.0,
+      "Malakand": 25.0,
+      "Mardan": 30.0
+    },
+    "Malakand": {
+      "Mardan": 40.0,
+      "Swabi": 25.0,
+      "Mardan": 40.0
+    },
+    "Gujranwala": {
+      "Gujrat": 35.0,
+      "Lahore": 50.0,
+      "Sheikhupura": 30.0
+    },
+    "Sialkot": {
+      "Gujrat": 25.0,
+      "Gujranwala": 30.0,
+      "Narowal": 20.0
+    },
+    "Faisalabad": {
+      "Sargodha": 65.0,
+      "Toba Tek Singh": 25.0,
+      "Jhang": 30.0
+    },
+    "Jhang": {
+      "Sargodha": 45.0,
+      "Faisalabad": 30.0,
+      "Toba Tek Singh": 20.0
+    },
+    "Hunza": {
+      "Gilgit": 35.0,
+      "Skardu": 40.0,
+      "Gilgit": 35.0
+    },
+    "Lahore": {
+      "Gujranwala": 50.0,
+      "Kasur": 30.0,
+      "Nankana Sahib": 40.0
+    },
+    "Sheikhupura": {
+      "Gujranwala": 30.0,
+      "Lahore": 25.0,
+      "Nankana Sahib": 20.0
+    },
+    "Narowal": {
+      "Sialkot": 20.0,
+      "Gujranwala": 25.0,
+      "Sialkot": 20.0
+    },
+    "Toba Tek Singh": {
+      "Faisalabad": 25.0,
+      "Jhang": 20.0,
+      "Faisalabad": 25.0
+    },
+    "Kasur": {
+      "Lahore": 30.0,
+      "Okara": 25.0,
+      "Lahore": 30.0
+    },
+    "Nankana Sahib": {
+      "Lahore": 40.0,
+      "Sheikhupura": 20.0,
+      "Lahore": 40.0
+    },
+    "Okara": {
+      "Kasur": 25.0,
+      "Sahiwal": 20.0,
+      "Kasur": 25.0
+    },
+    "Sahiwal": {
+      "Okara": 20.0,
+      "Pakpattan": 15.0,
+      "Okara": 20.0
+    },
+    "Pakpattan": {
+      "Sahiwal": 15.0,
+      "Okara": 18.0,
+      "Sahiwal": 15.0
+    }
+  },
+  "metadata": {
+    "saved_at": "2024-01-15T11:00:00",
+    "city_count": 32,
+    "connection_count": 48,
+    "description": "Balanced binary tree structure with 2 children per node (except leaves)",
+    "tree_structure": {
+      "levels": 5,
+      "max_children_per_node": 2,
+      "total_nodes": 32,
+      "leaf_nodes": 16
+    }
+  }
+}

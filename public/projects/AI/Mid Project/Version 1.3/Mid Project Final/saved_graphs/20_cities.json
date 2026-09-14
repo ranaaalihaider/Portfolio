@@ -1,0 +1,53 @@
+{
+  "cities": {
+    "Karachi": ["Hyderabad", "Thatta"],
+    "Hyderabad": ["Karachi", "Nawabshah", "Jamshoro"],
+    "Thatta": ["Karachi", "Badin"],
+    "Badin": ["Thatta"],
+    "Nawabshah": ["Hyderabad", "Sukkur"],
+    "Jamshoro": ["Hyderabad", "Sehwan"],
+    "Sehwan": ["Jamshoro", "Dadu"],
+    "Dadu": ["Sehwan", "Larkana"],
+    "Larkana": ["Dadu", "Khairpur"],
+    "Khairpur": ["Larkana"],
+    "Sukkur": ["Nawabshah", "Rahim Yar Khan"],
+    "Rahim Yar Khan": ["Sukkur", "Bahawalpur", "Sadiqabad"],
+    "Bahawalpur": ["Rahim Yar Khan", "Multan", "Bahawalnagar"],
+    "Multan": ["Bahawalpur", "Khanewal", "Dera Ghazi Khan"],
+    "Khanewal": ["Multan", "Jahanian"],
+    "Jahanian": ["Khanewal", "Lodhran"],
+    "Lodhran": ["Jahanian"],
+    "Bahawalnagar": ["Bahawalpur"],
+    "Dera Ghazi Khan": ["Multan"],
+    "Sadiqabad": ["Rahim Yar Khan"]
+  },
+  "connections": {
+    "Karachi": {"Hyderabad": 160, "Thatta": 98},
+    "Hyderabad": {"Karachi": 160, "Nawabshah": 120, "Jamshoro": 18},
+    "Thatta": {"Karachi": 98, "Badin": 100},
+    "Badin": {"Thatta": 100},
+    "Nawabshah": {"Hyderabad": 120, "Sukkur": 300},
+    "Jamshoro": {"Hyderabad": 18, "Sehwan": 90},
+    "Sehwan": {"Jamshoro": 90, "Dadu": 65},
+    "Dadu": {"Sehwan": 65, "Larkana": 175},
+    "Larkana": {"Dadu": 175, "Khairpur": 125},
+    "Khairpur": {"Larkana": 125},
+    "Sukkur": {"Nawabshah": 300, "Rahim Yar Khan": 200},
+    "Rahim Yar Khan": {"Sukkur": 200, "Bahawalpur": 190, "Sadiqabad": 25},
+    "Bahawalpur": {"Rahim Yar Khan": 190, "Multan": 100, "Bahawalnagar": 190},
+    "Multan": {"Bahawalpur": 100, "Khanewal": 50, "Dera Ghazi Khan": 90},
+    "Khanewal": {"Multan": 50, "Jahanian": 20},
+    "Jahanian": {"Khanewal": 20, "Lodhran": 35},
+    "Lodhran": {"Jahanian": 35},
+    "Bahawalnagar": {"Bahawalpur": 190},
+    "Dera Ghazi Khan": {"Multan": 90},
+    "Sadiqabad": {"Rahim Yar Khan": 25}
+  },
+  "metadata": {
+    "saved_at": "2024-01-15T12:00:00",
+    "city_count": 20,
+    "connection_count": 19,
+    "description": "Tree-structured graph with 20 Pakistani cities - NO CYCLES - Pure Tree",
+    "version": "4.0"
+  }
+}

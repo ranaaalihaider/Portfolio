@@ -1,0 +1,9 @@
+<component name="libraryTable">
+  <library name="syntheticaBlackEye2">
+    <CLASSES>
+      <root url="jar://$PROJECT_DIR$/build/classes/Theme/syntheticaBlackEye.jar!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES />
+  </library>
+</component>

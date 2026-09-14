@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+
+<Form version="1.3" maxVersion="1.9" type="org.netbeans.modules.form.forminfo.JFrameFormInfo">
+  <NonVisualComponents>
+    <Container class="javax.swing.JDialog" name="jDialog1">
+
+      <Layout>
+        <DimensionLayout dim="0">
+          <Group type="103" groupAlignment="0" attributes="0">
+              <EmptySpace min="0" pref="400" max="32767" attributes="0"/>
+          </Group>
+        </DimensionLayout>
+        <DimensionLayout dim="1">
+          <Group type="103" groupAlignment="0" attributes="0">
+              <EmptySpace min="0" pref="300" max="32767" attributes="0"/>
+          </Group>
+        </DimensionLayout>
+      </Layout>
+    </Container>
+  </NonVisualComponents>
+  <Properties>
+    <Property name="defaultCloseOperation" type="int" value="3"/>
+  </Properties>
+  <SyntheticProperties>
+    <SyntheticProperty name="formSizePolicy" type="int" value="1"/>
+    <SyntheticProperty name="generateCenter" type="boolean" value="true"/>
+  </SyntheticProperties>
+  <AuxValues>
+    <AuxValue name="FormSettings_autoResourcing" type="java.lang.Integer" value="0"/>
+    <AuxValue name="FormSettings_autoSetComponentName" type="java.lang.Boolean" value="false"/>
+    <AuxValue name="FormSettings_generateFQN" type="java.lang.Boolean" value="true"/>
+    <AuxValue name="FormSettings_generateMnemonicsCode" type="java.lang.Boolean" value="false"/>
+    <AuxValue name="FormSettings_i18nAutoMode" type="java.lang.Boolean" value="false"/>
+    <AuxValue name="FormSettings_layoutCodeTarget" type="java.lang.Integer" value="1"/>
+    <AuxValue name="FormSettings_listenerGenerationStyle" type="java.lang.Integer" value="0"/>
+    <AuxValue name="FormSettings_variablesLocal" type="java.lang.Boolean" value="false"/>
+    <AuxValue name="FormSettings_variablesModifier" type="java.lang.Integer" value="2"/>
+  </AuxValues>
+
+  <Layout>
+    <DimensionLayout dim="0">
+      <Group type="103" groupAlignment="0" attributes="0">
+          <Group type="102" alignment="0" attributes="0">
+              <EmptySpace min="-2" pref="100" max="-2" attributes="0"/>
+              <Component id="jComboBox1" min="-2" max="-2" attributes="0"/>
+              <EmptySpace pref="86" max="32767" attributes="0"/>
+          </Group>
+      </Group>
+    </DimensionLayout>
+    <DimensionLayout dim="1">
+      <Group type="103" groupAlignment="0" attributes="0">
+          <Group type="102" alignment="0" attributes="0">
+              <EmptySpace min="-2" pref="51" max="-2" attributes="0"/>
+              <Component id="jComboBox1" min="-2" max="-2" attributes="0"/>
+              <EmptySpace pref="225" max="32767" attributes="0"/>
+          </Group>
+      </Group>
+    </DimensionLayout>
+  </Layout>
+  <SubComponents>
+    <Component class="javax.swing.JComboBox" name="jComboBox1">
+      <Properties>
+        <Property name="model" type="javax.swing.ComboBoxModel" editor="org.netbeans.modules.form.editors2.ComboBoxModelEditor">
+          <StringArray count="31">
+            <StringItem index="0" value="FlatArcIJTheme"/>
+            <StringItem index="1" value="FlatArcOrangeIJTheme"/>
+            <StringItem index="2" value="FlatArcDarkIJTheme"/>
+            <StringItem index="3" value="FlatArcDarkOrangeIJTheme"/>
+            <StringItem index="4" value="FlatCarbonIJTheme"/>
+            <StringItem index="5" value="FlatCobalt2IJTheme"/>
+            <StringItem index="6" value="FlatCyanLightIJTheme"/>
+            <StringItem index="7" value="FlatDarkFlatIJTheme"/>
+            <StringItem index="8" value="FlatDarkPurpleIJTheme"/>
+            <StringItem index="9" value="FlatDraculaIJTheme"/>
+            <StringItem index="10" value="FlatGradiantoDarkFuchsiaIJTheme"/>
+            <StringItem index="11" value="FlatGradiantoDeepOceanIJTheme"/>
+            <StringItem index="12" value="FlatGradiantoMidnightBlueIJTheme"/>
+            <StringItem index="13" value="FlatGradiantoNatureGreenIJTheme"/>
+            <StringItem index="14" value="FlatGrayIJTheme"/>
+            <StringItem index="15" value="FlatGruvboxDarkHardIJTheme"/>
+            <StringItem index="16" value="FlatGruvboxDarkMediumIJTheme"/>
+            <StringItem index="17" value="FlatGruvboxDarkSoftIJTheme"/>
+            <StringItem index="18" value="FlatHiberbeeDarkIJTheme"/>
+            <StringItem index="19" value="FlatHighContrastIJTheme"/>
+            <StringItem index="20" value="FlatLightFlatIJTheme"/>
+            <StringItem index="21" value="FlatMaterialDesignDarkIJTheme"/>
+            <StringItem index="22" value="FlatMonocaiIJTheme"/>
+            <StringItem index="23" value="FlatMonokaiProIJTheme"/>
+            <StringItem index="24" value="FlatNordIJTheme"/>
+            <StringItem index="25" value="FlatOneDarkIJTheme"/>
+            <StringItem index="26" value="FlatSolarizedDarkIJTheme"/>
+            <StringItem index="27" value="FlatSolarizedLightIJTheme"/>
+            <StringItem index="28" value="FlatSpacegrayIJTheme"/>
+            <StringItem index="29" value="FlatVuesionIJTheme"/>
+            <StringItem index="30" value="FlatXcodeDarkIJTheme"/>
+          </StringArray>
+        </Property>
+      </Properties>
+      <AuxValues>
+        <AuxValue name="JavaCodeGenerator_TypeParameters" type="java.lang.String" value="&lt;String&gt;"/>
+      </AuxValues>
+    </Component>
+  </SubComponents>
+</Form>

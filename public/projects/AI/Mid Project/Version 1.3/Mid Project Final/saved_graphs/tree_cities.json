@@ -1,0 +1,45 @@
+{
+  "cities": {
+    "Rahim Yar Khan": ["Bahawalpur"],
+    "Bahawalnagar": ["Bahawalpur"],
+    "Jahanian": ["Khanewal"],
+    "Bahawalpur": ["Sadiqabad"],
+    "Khanewal": ["Sadiqabad"],
+    "Dera Ghazi Khan": ["Sadiqabad"],
+    "Sadiqabad": []
+  },
+  "connections": {
+    "Rahim Yar Khan": {
+      "Bahawalpur": 190.0
+    },
+    "Bahawalnagar": {
+      "Bahawalpur": 190.0
+    },
+    "Jahanian": {
+      "Khanewal": 20.0
+    },
+    "Bahawalpur": {
+      "Rahim Yar Khan": 190.0,
+      "Bahawalnagar": 190.0,
+      "Sadiqabad": 100.0
+    },
+    "Khanewal": {
+      "Jahanian": 20.0,
+      "Sadiqabad": 50.0
+    },
+    "Dera Ghazi Khan": {
+      "Sadiqabad": 90.0
+    },
+    "Sadiqabad": {
+      "Bahawalpur": 100.0,
+      "Khanewal": 50.0,
+      "Dera Ghazi Khan": 90.0
+    }
+  },
+  "metadata": {
+    "saved_at": "2024-01-15T10:30:00",
+    "city_count": 7,
+    "connection_count": 6,
+    "description": "Tree structure with clear parent-child relationships"
+  }
+}

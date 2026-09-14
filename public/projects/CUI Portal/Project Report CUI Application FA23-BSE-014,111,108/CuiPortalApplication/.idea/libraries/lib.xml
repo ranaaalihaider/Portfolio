@@ -1,0 +1,13 @@
+<component name="libraryTable">
+  <library name="lib">
+    <CLASSES>
+      <root url="jar://$PROJECT_DIR$/dist/lib/syntheticaBlackEye.jar!/" />
+      <root url="jar://$PROJECT_DIR$/dist/lib/material-theme-jetbrains-9.7.0.jar!/" />
+      <root url="jar://$PROJECT_DIR$/dist/lib/synthetica.jar!/" />
+      <root url="jar://$PROJECT_DIR$/dist/lib/flatlaf-3.5.4.jar!/" />
+      <root url="jar://$PROJECT_DIR$/dist/lib/flatlaf-intellij-themes-3.5.4.jar!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES />
+  </library>
+</component>

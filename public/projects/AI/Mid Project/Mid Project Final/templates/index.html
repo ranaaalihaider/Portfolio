@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pathfinding Algorithms Visualizer</title>
+    <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🗺️ Pathfinding Algorithms Visualizer</h1>
+            <p>Create a graph of cities and find optimal paths using various algorithms</p>
+        </header>
+
+        <div class="main-content">
+            <!-- Control Panel -->
+            <div class="control-panel">
+                <div class="section">
+                    <h3>🏙️ Add Cities</h3>
+                    <div class="input-group">
+                        <input type="text" id="cityName" placeholder="Enter city name" maxlength="20">
+                        <button onclick="addCity()">Add City</button>
+                    </div>
+                </div>
+
+                <div class="section">
+                    <h3>🛣️ Add Connections</h3>
+                    <div class="input-group">
+                        <select id="fromCity">
+                            <option value="">Select from city</option>
+                        </select>
+                        <select id="toCity">
+                            <option value="">Select to city</option>
+                        </select>
+                        <input type="number" id="distance" placeholder="Distance" min="0.1" step="0.1">
+                        <button onclick="addConnection()">Add Connection</button>
+                    </div>
+                </div>
+
+                <div class="section">
+                    <h3>🔍 Find Path</h3>
+                    <div class="input-group">
+                        <select id="startCity">
+                            <option value="">Select start city</option>
+                        </select>
+                        <select id="endCity">
+                            <option value="">Select end city</option>
+                        </select>
+                        <select id="algorithm">
+                            <option value="">Select algorithm</option>
+                            <option value="bfs">Breadth-First Search (BFS)</option>
+                            <option value="dfs">Depth-First Search (DFS)</option>
+                            <!-- <option value="dijkstra">Dijkstra's Algorithm</option> -->
+                            <!-- <option value="a_star">A* Search</option> -->
+                            <!-- <option value="greedy">Greedy Best-First Search</option> -->
+                            <!-- <option value="genetic">Genetic Algorithm</option> -->
+                            <!-- <option value="simulated_annealing">Simulated Annealing</option> -->
+                        </select>
+                        <button onclick="findPath()">Find Path</button>
+                    </div>
+                    <div class="input-group">
+                        <label style="display:flex;align-items:center;gap:8px;">
+                            <input type="checkbox" id="showExplorationTree" checked>
+                            Show exploration tree (parent-child, expansion order)
+                        </label>
+                    </div>
+                </div>
+
+                <div class="section">
+                    <h3>💾 Save & Load</h3>
+                    <div class="input-group">
+                        <input type="text" id="saveFilename" placeholder="Enter filename to save" maxlength="30">
+                        <button onclick="saveGraph()">💾 Save Graph</button>
+                    </div>
+                    <div class="input-group">
+                        <select id="loadFilename">
+                            <option value="">Select file to load</option>
+                        </select>
+                        <button onclick="loadGraph()">📂 Load Graph</button>
+                    </div>
+                </div>
+
+                <div class="section">
+                    <div class="input-group">
+                        <button onclick="applyBetterLayout()" class="layout-btn">🔄 Reorganize Layout</button>
+                        <button onclick="togglePhysics()" class="physics-btn">⚡ Toggle Physics</button>
+                    </div>
+                    <button onclick="clearGraph()" class="clear-btn">🗑️ Clear Graph</button>
+                </div>
+            </div>
+
+            <!-- Visualization Area -->
+            <div class="visualization-area">
+                <div class="legend">
+                    <h4>🎨 Color Legend</h4>
+                    <div class="legend-items">
+                        <div class="legend-item">
+                            <div class="legend-color start-color"></div>
+                            <span>Start Node</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-color end-color"></div>
+                            <span>End Node</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-color path-color"></div>
+                            <span>Path Nodes</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-color visited-color"></div>
+                            <span>Visited Nodes</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-color normal-color"></div>
+                            <span>Normal Nodes</span>
+                        </div>
+                    </div>
+                </div>
+                <div id="network"></div>
+                <div id="results" class="results-panel">
+                    <h3>📊 Results</h3>
+                    <div id="resultContent">
+                        <p>Add cities and connections, then select an algorithm to find paths!</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Algorithm Information -->
+        <div class="algorithm-info">
+            <h3>🧠 Algorithm Information</h3>
+            <div class="algo-grid">
+                <div class="algo-card">
+                    <h4>BFS</h4>
+                    <p>Explores all nodes at current depth before moving to next level. Guarantees shortest path in terms of number of edges.</p>
+                </div>
+                <div class="algo-card">
+                    <h4>DFS</h4>
+                    <p>Explores as far as possible along each branch before backtracking. May not find optimal path but uses less memory.</p>
+                </div>
+                <!-- <div class="algo-card">
+                    <h4>Dijkstra</h4>
+                    <p>Finds shortest path in terms of total distance. Always explores the closest unvisited node first.</p>
+                </div>
+                <div class="algo-card">
+                    <h4>A*</h4>
+                    <p>Combines Dijkstra with heuristic function. More efficient than Dijkstra when good heuristics are available.</p>
+                </div>
+                <div class="algo-card">
+                    <h4>Greedy Best-First</h4>
+                    <p>Always chooses the node that appears closest to the goal. Fast but may not find optimal solutions.</p>
+                </div>
+                <div class="algo-card">
+                    <h4>Genetic Algorithm</h4>
+                    <p>Uses evolution-inspired techniques with crossover and mutation to find good solutions.</p>
+                </div>
+                <div class="algo-card">
+                    <h4>Simulated Annealing</h4>
+                    <p>Uses probabilistic acceptance to escape local optima and find global optimum.</p>
+                </div> -->
+            </div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>
