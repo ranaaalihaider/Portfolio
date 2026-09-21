@@ -75,22 +75,11 @@ export const projects = [
       "AI-powered recommendations", "University analytics", "Interactive dashboards"
     ],
     technologies: ["Python", "Graph Neural Networks", "AI/ML", "GitHub API"],
-    screenshots: [],
-    github: "https://github.com/ranaaalihaider/",
-    link: ""
-  },
-  {
-    id: "tradeflow",
-    title: "TradeFlow",
-    type: "Multi-Tenant Distribution Management System",
-    description: "TradeFlow is a business and distribution management platform designed to manage different business operations from a centralized system. Built with a multi-tenant architecture supporting role-based access control, inventory, purchases, sales, accounting ledgers, and management dashboards.",
-    features: [
-      "Multi-tenant architecture", "Role-Based Access Control", "Inventory management",
-      "Purchase management", "Sales management", "Stock tracking",
-      "Accounting ledgers", "Business reporting", "Management dashboards"
+    screenshots: [
+      "/projects/Gituni/developer-profile.png",
+      "/projects/Gituni/developer-ranking-&-leaderboard.png",
+      "/projects/Gituni/repository-management.png"
     ],
-    technologies: ["Node.js", "Express.js", "MongoDB", "Mongoose"],
-    screenshots: [],
     github: "https://github.com/ranaaalihaider/",
     link: ""
   },
