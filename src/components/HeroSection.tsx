@@ -27,15 +27,16 @@ export default function HeroSection() {
           <span className="text-muted-foreground font-medium">Available for projects & opportunities</span>
         </motion.div>
         
-        <h1 className="lg:text-6xl text-5xl font-black tracking-tighter leading-[1.1]">
-          <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary to-blue-300">
-            {personalInfo.role}
-          </span>
-        </h1>
+        <div className="flex flex-col gap-2">
+          <span className="text-primary font-semibold text-lg">Hi, I am</span>
+          <h1 className="lg:text-[5.5rem] text-6xl font-black tracking-tighter text-foreground leading-none">
+            {personalInfo.name}.
+          </h1>
+        </div>
         
-        <p className="text-2xl lg:text-3xl font-bold text-foreground/90">
-          {personalInfo.name} — {personalInfo.title.split(" | ")[0]}
-        </p>
+        <h2 className="lg:text-4xl text-3xl font-bold tracking-tight text-foreground/90 leading-[1.2] max-w-2xl lg:mx-0 mx-auto">
+          {personalInfo.role}
+        </h2>
         
         <p className="lg:text-lg text-base text-muted-foreground leading-relaxed max-w-xl mx-auto lg:mx-0">
           {personalInfo.shortIntro}
