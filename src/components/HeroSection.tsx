@@ -35,7 +35,7 @@ export default function HeroSection() {
         </div>
         
         <h2 className="lg:text-4xl text-3xl font-bold tracking-tight text-foreground/90 leading-[1.2] max-w-2xl lg:mx-0 mx-auto">
-          {personalInfo.role}
+          {personalInfo.taglines[0]}
         </h2>
         
         <p className="lg:text-lg text-base text-muted-foreground leading-relaxed max-w-xl mx-auto lg:mx-0">
