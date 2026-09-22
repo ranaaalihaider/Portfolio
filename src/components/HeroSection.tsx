@@ -7,7 +7,7 @@ import { motion } from "framer-motion";
 
 export default function HeroSection() {
   return (
-    <section className="grid lg:grid-cols-2 grid-cols-1 items-center lg:text-left text-center min-h-[90vh] py-10" id="home">
+    <section className="grid lg:grid-cols-2 grid-cols-1 items-center lg:text-left text-center min-h-[90vh] py-10 px-4 md:px-6 max-w-7xl mx-auto" id="home">
       <motion.header 
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -29,12 +29,12 @@ export default function HeroSection() {
         
         <div className="flex flex-col gap-2">
           <span className="text-primary font-semibold text-lg">Hi, I am</span>
-          <h1 className="lg:text-[5.5rem] text-6xl font-black tracking-tighter text-foreground leading-none">
+          <h1 className="lg:text-[5.5rem] md:text-6xl text-5xl font-black tracking-tighter text-foreground leading-none">
             {personalInfo.name}.
           </h1>
         </div>
         
-        <h2 className="lg:text-4xl text-3xl font-bold tracking-tight text-foreground/90 leading-[1.2] max-w-2xl lg:mx-0 mx-auto">
+        <h2 className="lg:text-4xl md:text-3xl text-2xl font-bold tracking-tight text-foreground/90 leading-[1.2] max-w-2xl lg:mx-0 mx-auto">
           {personalInfo.taglines[0]}
         </h2>
         
