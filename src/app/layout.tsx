@@ -21,6 +21,7 @@ export const metadata: Metadata = {
 
 import CustomCursor from "@/components/CustomCursor";
 import ScrollProgress from "@/components/ScrollProgress";
+import VisitorTracker from "@/components/VisitorTracker";
 
 export default function RootLayout({
   children,
@@ -30,6 +31,7 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark" suppressHydrationWarning>
       <body className={`${inter.variable} font-sans antialiased bg-[var(--background)] text-[var(--foreground)] overflow-x-hidden`} suppressHydrationWarning>
+        <VisitorTracker />
         <CustomCursor />
         <ScrollProgress />
         {children}
