@@ -1,6 +1,6 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { LogOut, Monitor, Globe, Clock, ShieldAlert } from "lucide-react";
+import { LogOut, Monitor, Globe, Clock, ShieldAlert, MapPin, LayoutTemplate } from "lucide-react";
 
 async function getVisitors() {
   const firebaseUrl = process.env.FIREBASE_DATABASE_URL || "https://portfolio-visitores-tracker-default-rtdb.firebaseio.com/";
@@ -79,17 +79,20 @@ export default async function AdminDashboard() {
         {/* Visitors Table */}
         <div className="bg-card/80 backdrop-blur-xl border border-border rounded-2xl overflow-hidden shadow-xl">
           <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
+            <table className="w-full text-left border-collapse min-w-[800px]">
               <thead>
                 <tr className="bg-muted/50 border-b border-border">
                   <th className="p-4 font-semibold text-muted-foreground whitespace-nowrap">
-                    <div className="flex items-center gap-2"><Globe className="w-4 h-4" /> IP Address</div>
-                  </th>
-                  <th className="p-4 font-semibold text-muted-foreground">
-                    <div className="flex items-center gap-2"><Monitor className="w-4 h-4" /> Device / Browser</div>
+                    <div className="flex items-center gap-2"><MapPin className="w-4 h-4" /> Location / IP</div>
                   </th>
                   <th className="p-4 font-semibold text-muted-foreground whitespace-nowrap">
-                    <div className="flex items-center gap-2"><Clock className="w-4 h-4" /> Time of Visit</div>
+                    <div className="flex items-center gap-2"><Monitor className="w-4 h-4" /> Device / OS</div>
+                  </th>
+                  <th className="p-4 font-semibold text-muted-foreground whitespace-nowrap">
+                    <div className="flex items-center gap-2"><Globe className="w-4 h-4" /> Browser</div>
+                  </th>
+                  <th className="p-4 font-semibold text-muted-foreground whitespace-nowrap">
+                    <div className="flex items-center gap-2"><Clock className="w-4 h-4" /> Time (PKT)</div>
                   </th>
                 </tr>
               </thead>
@@ -97,18 +100,29 @@ export default async function AdminDashboard() {
                 {visitors.length > 0 ? (
                   visitors.map((visitor) => (
                     <tr key={visitor.id} className="hover:bg-muted/30 transition-colors">
-                      <td className="p-4 font-mono text-sm text-primary">{visitor.ip || "Unknown"}</td>
-                      <td className="p-4 text-sm text-foreground/80 max-w-md truncate" title={visitor.userAgent}>
-                        {visitor.userAgent || "Unknown Device"}
+                      <td className="p-4">
+                        <div className="flex flex-col">
+                          <span className="font-semibold text-primary">{visitor.location || "Unknown Location"}</span>
+                          <span className="text-xs font-mono text-muted-foreground">{visitor.ip || "Unknown IP"}</span>
+                        </div>
+                      </td>
+                      <td className="p-4">
+                        <div className="flex flex-col">
+                          <span className="text-sm font-medium text-foreground/90">{visitor.device || "Unknown Device"}</span>
+                          <span className="text-xs text-muted-foreground">{visitor.os || "Unknown OS"}</span>
+                        </div>
+                      </td>
+                      <td className="p-4">
+                        <span className="text-sm text-foreground/80">{visitor.browser || "Unknown Browser"}</span>
                       </td>
                       <td className="p-4 text-sm text-muted-foreground whitespace-nowrap">
-                        {visitor.visitedAt || new Date(visitor.timestamp).toLocaleString()}
+                        {visitor.visitedAt || new Date(visitor.timestamp).toLocaleString('en-US', { timeZone: 'Asia/Karachi' })}
                       </td>
                     </tr>
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={3} className="p-8 text-center text-muted-foreground">
+                    <td colSpan={4} className="p-8 text-center text-muted-foreground">
                       No visitors tracked yet.
                     </td>
                   </tr>
