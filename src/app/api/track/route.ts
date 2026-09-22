@@ -24,7 +24,7 @@ export async function POST(request: Request) {
     };
 
     // 4. Send to Firebase Realtime Database
-    const firebaseUrl = process.env.FIREBASE_DATABASE_URL;
+    const firebaseUrl = process.env.FIREBASE_DATABASE_URL || "https://portfolio-visitores-tracker-default-rtdb.firebaseio.com/";
     
     if (firebaseUrl) {
       // Ensure the URL ends correctly and points to the 'visitors.json' node

@@ -30,11 +30,13 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className="dark" suppressHydrationWarning>
-      <body className={`${inter.variable} font-sans antialiased bg-[var(--background)] text-[var(--foreground)] overflow-x-hidden`} suppressHydrationWarning>
+      <body className={`${inter.variable} font-sans antialiased bg-[var(--background)] text-[var(--foreground)] overflow-x-hidden w-full`} suppressHydrationWarning>
         <VisitorTracker />
         <CustomCursor />
         <ScrollProgress />
-        {children}
+        <main className="w-full overflow-x-hidden min-h-screen">
+          {children}
+        </main>
       </body>
     </html>
   );
