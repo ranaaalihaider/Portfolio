@@ -17,7 +17,7 @@ git add .
 :: Prompt for commit message
 echo.
 set /p msg="Enter commit message (or press enter for default): "
-if "%msg%"=="" set msg="Auto-update: %date% %time%"
+if "%msg%"=="" set "msg=Auto-update: %date% %time%"
 
 :: Commit changes
 echo.
