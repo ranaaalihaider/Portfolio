@@ -114,8 +114,10 @@ export default {
       'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     };
 
-    if (allowedOrigins.includes(origin)) {
+    if (origin) {
       corsHeaders['Access-Control-Allow-Origin'] = origin;
+    } else {
+      corsHeaders['Access-Control-Allow-Origin'] = '*';
     }
 
     if (request.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
