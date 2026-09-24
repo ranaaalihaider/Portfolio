@@ -2,7 +2,7 @@
 import { useEffect, useState, use } from 'react';
 import { useRouter } from 'next/navigation';
 import { fetchApi } from '@/lib/api';
-import { ArrowLeft, Edit2, RotateCcw, Ban, CheckCircle, Copy } from 'lucide-react';
+import { ArrowLeft, Edit2, RotateCcw, Ban, CheckCircle, Copy, Eye, EyeOff } from 'lucide-react';
 import Link from 'next/link';
 
 interface Usage {
@@ -31,6 +31,7 @@ export default function CustomerDetail({ params }: { params: Promise<{ id: strin
   const [error, setError] = useState('');
   const [rotating, setRotating] = useState(false);
   const [updating, setUpdating] = useState(false);
+  const [showKey, setShowKey] = useState(false);
   
   const [newKey, setNewKey] = useState('');
 
@@ -167,11 +168,18 @@ export default function CustomerDetail({ params }: { params: Promise<{ id: strin
           <div className="bg-gray-50 border border-gray-200 p-4 rounded-lg">
             <h4 className="text-gray-700 font-medium mb-2">Current API Key</h4>
             <div className="flex items-center justify-between bg-white p-2 border border-gray-200 rounded">
-              <code className="text-sm text-gray-800 break-all">{customer.api_key || 'Not available'}</code>
+              <code className="text-sm text-gray-800 break-all select-all">
+                {customer.api_key ? (showKey ? customer.api_key : '•'.repeat(40)) : 'Not available'}
+              </code>
               {customer.api_key && (
-                <button onClick={() => copyToClipboard(customer.api_key!)} className="p-2 hover:bg-gray-100 rounded-md transition-colors" title="Copy to clipboard">
-                  <Copy size={16} className="text-gray-500" />
-                </button>
+                <div className="flex items-center gap-1">
+                  <button onClick={() => setShowKey(!showKey)} className="p-2 hover:bg-gray-100 rounded-md transition-colors" title={showKey ? "Hide key" : "Show key"}>
+                    {showKey ? <EyeOff size={16} className="text-gray-500" /> : <Eye size={16} className="text-gray-500" />}
+                  </button>
+                  <button onClick={() => copyToClipboard(customer.api_key!)} className="p-2 hover:bg-gray-100 rounded-md transition-colors" title="Copy to clipboard">
+                    <Copy size={16} className="text-gray-500" />
+                  </button>
+                </div>
               )}
             </div>
             <p className="text-sm text-amber-600 mt-2 font-medium">Warning: Due to a recent setting change, older keys may show as hashed. Rotate the key to generate a new viewable plain text key.</p>
