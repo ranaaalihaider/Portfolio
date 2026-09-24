@@ -51,6 +51,7 @@ export async function fetchApi(endpoint: string, options: RequestInit = {}) {
     res = await fetch(`${API_BASE}${endpoint}`, {
       ...options,
       headers,
+      cache: 'no-store',
     });
   } catch (err) {
     if (err instanceof Error && err.message === 'Failed to fetch') {
