@@ -1,135 +1,75 @@
-import { cookies } from "next/headers";
-import { redirect } from "next/navigation";
-import { LogOut, Monitor, Globe, Clock, ShieldAlert, MapPin, LayoutTemplate } from "lucide-react";
+'use client';
+import { useEffect, useState } from 'react';
+import { DashboardStats, fetchApi } from '@/lib/api';
+import { Users, UserCheck, UserX, Activity, Zap, Database } from 'lucide-react';
 
-async function getVisitors() {
-  const firebaseUrl = process.env.FIREBASE_DATABASE_URL || "https://portfolio-visitores-tracker-default-rtdb.firebaseio.com/";
-  const endpoint = firebaseUrl.endsWith('/') ? `${firebaseUrl}visitors.json` : `${firebaseUrl}/visitors.json`;
-  
-  try {
-    const res = await fetch(endpoint, { cache: "no-store" });
-    if (!res.ok) return [];
-    
-    const data = await res.json();
-    if (!data) return [];
-    
-    // Firebase returns an object with unique keys. Convert to array.
-    const visitors = Object.keys(data).map(key => ({
-      id: key,
-      ...data[key]
-    }));
-    
-    // Sort by timestamp descending (newest first)
-    return visitors.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-  } catch (error) {
-    console.error("Failed to fetch visitors:", error);
-    return [];
-  }
-}
+export default function AdminDashboard() {
+  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
-export default async function AdminDashboard() {
-  // Check Authentication
-  const cookieStore = await cookies();
-  const session = cookieStore.get("admin_session");
+  useEffect(() => {
+    fetchApi('/api/admin/dashboard')
+      .then(setStats)
+      .catch(err => setError(err.message))
+      .finally(() => setLoading(false));
+  }, []);
 
-  if (!session) {
-    redirect("/login");
-  }
+  if (loading) return <div className="animate-pulse">Loading dashboard...</div>;
+  if (error) return <div className="text-red-500">Error: {error}</div>;
+  if (!stats) return null;
 
-  const visitors = await getVisitors();
+  const statCards = [
+    { title: 'Total Customers', value: stats.totalCustomers, icon: Users, color: 'text-blue-500', bg: 'bg-blue-50' },
+    { title: 'Active Customers', value: stats.activeCustomers, icon: UserCheck, color: 'text-emerald-500', bg: 'bg-emerald-50' },
+    { title: 'Blocked Customers', value: stats.blockedCustomers, icon: UserX, color: 'text-red-500', bg: 'bg-red-50' },
+    { title: 'Requests Today', value: stats.requestsToday, icon: Activity, color: 'text-purple-500', bg: 'bg-purple-50' },
+    { title: 'Requests This Month', value: stats.requestsThisMonth, icon: Zap, color: 'text-yellow-500', bg: 'bg-yellow-50' },
+    { title: 'Total Tokens (Month)', value: stats.totalTokensThisMonth.toLocaleString(), icon: Database, color: 'text-indigo-500', bg: 'bg-indigo-50' },
+  ];
 
   return (
-    <div className="min-h-screen p-6 md:p-12 relative">
-      <div className="max-w-7xl mx-auto space-y-8 relative z-10">
-        
-        {/* Header */}
-        <header className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-card/50 backdrop-blur-md border border-border p-6 rounded-2xl">
-          <div>
-            <h1 className="text-3xl font-black flex items-center gap-3">
-              <ShieldAlert className="w-8 h-8 text-primary" />
-              Admin Dashboard
-            </h1>
-            <p className="text-muted-foreground mt-1">Visitor Tracking & Analytics</p>
-          </div>
-          
-          <form action={async () => {
-            "use server";
-            const cookieStore = await cookies();
-            cookieStore.delete("admin_session");
-            redirect("/login");
-          }}>
-            <button 
-              type="submit" 
-              className="flex items-center gap-2 bg-red-500/10 text-red-500 hover:bg-red-500/20 px-4 py-2 rounded-xl font-semibold transition-colors"
-            >
-              <LogOut className="w-4 h-4" />
-              Logout
-            </button>
-          </form>
-        </header>
+    <div className="space-y-8">
+      <div>
+        <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
+        <p className="text-gray-500 mt-1">Overview of your AI API platform usage.</p>
+      </div>
 
-        {/* Stats Row */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-          <div className="bg-card/50 backdrop-blur-md border border-border p-6 rounded-2xl">
-            <h3 className="text-muted-foreground font-semibold mb-2">Total Visits</h3>
-            <p className="text-4xl font-black text-primary">{visitors.length}</p>
-          </div>
-        </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {statCards.map((card, idx) => {
+          const Icon = card.icon;
+          return (
+            <div key={idx} className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex items-center gap-4">
+              <div className={`p-4 rounded-full ${card.bg} ${card.color}`}>
+                <Icon size={24} />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-gray-500">{card.title}</p>
+                <h3 className="text-2xl font-bold text-gray-900">{card.value}</h3>
+              </div>
+            </div>
+          );
+        })}
+      </div>
 
-        {/* Visitors Table */}
-        <div className="bg-card/80 backdrop-blur-xl border border-border rounded-2xl overflow-hidden shadow-xl">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse min-w-[800px]">
-              <thead>
-                <tr className="bg-muted/50 border-b border-border">
-                  <th className="p-4 font-semibold text-muted-foreground whitespace-nowrap">
-                    <div className="flex items-center gap-2"><MapPin className="w-4 h-4" /> Location / IP</div>
-                  </th>
-                  <th className="p-4 font-semibold text-muted-foreground whitespace-nowrap">
-                    <div className="flex items-center gap-2"><Monitor className="w-4 h-4" /> Device / OS</div>
-                  </th>
-                  <th className="p-4 font-semibold text-muted-foreground whitespace-nowrap">
-                    <div className="flex items-center gap-2"><Globe className="w-4 h-4" /> Browser</div>
-                  </th>
-                  <th className="p-4 font-semibold text-muted-foreground whitespace-nowrap">
-                    <div className="flex items-center gap-2"><Clock className="w-4 h-4" /> Time (PKT)</div>
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border/50">
-                {visitors.length > 0 ? (
-                  visitors.map((visitor) => (
-                    <tr key={visitor.id} className="hover:bg-muted/30 transition-colors">
-                      <td className="p-4">
-                        <div className="flex flex-col">
-                          <span className="font-semibold text-primary">{visitor.location || "Unknown Location"}</span>
-                          <span className="text-xs font-mono text-muted-foreground">{visitor.ip || "Unknown IP"}</span>
-                        </div>
-                      </td>
-                      <td className="p-4">
-                        <div className="flex flex-col">
-                          <span className="text-sm font-medium text-foreground/90">{visitor.device || "Unknown Device"}</span>
-                          <span className="text-xs text-muted-foreground">{visitor.os || "Unknown OS"}</span>
-                        </div>
-                      </td>
-                      <td className="p-4">
-                        <span className="text-sm text-foreground/80">{visitor.browser || "Unknown Browser"}</span>
-                      </td>
-                      <td className="p-4 text-sm text-muted-foreground whitespace-nowrap">
-                        {visitor.visitedAt || new Date(visitor.timestamp).toLocaleString('en-US', { timeZone: 'Asia/Karachi' })}
-                      </td>
-                    </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td colSpan={4} className="p-8 text-center text-muted-foreground">
-                      No visitors tracked yet.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+      {/* Basic daily usage visualization */}
+      <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+        <h3 className="text-lg font-bold text-gray-900 mb-4">Recent Usage (Last 7 Days)</h3>
+        <div className="h-64 flex items-end gap-2">
+          {stats.recentUsage.map((day, idx) => {
+            const max = Math.max(...stats.recentUsage.map(d => d.requests), 1);
+            const height = `${(day.requests / max) * 100}%`;
+            return (
+              <div key={idx} className="flex-1 flex flex-col items-center gap-2 group">
+                <div className="w-full bg-emerald-100 rounded-t-sm relative group-hover:bg-emerald-200 transition-colors" style={{ height }}>
+                  <div className="opacity-0 group-hover:opacity-100 absolute -top-8 left-1/2 -translate-x-1/2 bg-gray-800 text-white text-xs py-1 px-2 rounded pointer-events-none whitespace-nowrap transition-opacity">
+                    {day.requests} requests
+                  </div>
+                </div>
+                <span className="text-xs text-gray-500">{day.date.substring(5)}</span>
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>
