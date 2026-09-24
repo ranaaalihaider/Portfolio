@@ -106,6 +106,7 @@ export default {
     const origin = request.headers.get('Origin') || '';
     const allowedOrigins = [
       'https://alihaider.site',
+      'https://www.alihaider.site',
       'http://localhost:3000'
     ];
     let corsHeaders = {
