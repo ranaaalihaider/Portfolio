@@ -45,10 +45,18 @@ export async function fetchApi(endpoint: string, options: RequestInit = {}) {
     headers.set('Content-Type', 'application/json');
   }
 
-  const res = await fetch(`${API_BASE}${endpoint}`, {
-    ...options,
-    headers,
-  });
+  let res;
+  try {
+    res = await fetch(`${API_BASE}${endpoint}`, {
+      ...options,
+      headers,
+    });
+  } catch (err) {
+    if (err instanceof Error && err.message === 'Failed to fetch') {
+      throw new Error(`Network Error: Browser blocked the request to ${API_BASE}. Open your Browser's Developer Tools -> Console to see the exact reason (Usually missing NEXT_PUBLIC_AI_API_BASE_URL, wrong URL, or a CORS block).`);
+    }
+    throw err;
+  }
 
   if (res.status === 401) {
     if (typeof window !== 'undefined') {
