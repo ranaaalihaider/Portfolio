@@ -9,6 +9,7 @@ export interface Customer {
   requests_today?: number;
   requests_month?: number;
   tokens_month?: number;
+  api_key?: string;
 }
 
 export interface DashboardStats {

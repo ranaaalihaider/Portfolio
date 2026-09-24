@@ -2,7 +2,7 @@
 import { useEffect, useState, use } from 'react';
 import { useRouter } from 'next/navigation';
 import { fetchApi } from '@/lib/api';
-import { ArrowLeft, Edit2, RotateCcw, Ban, CheckCircle } from 'lucide-react';
+import { ArrowLeft, Edit2, RotateCcw, Ban, CheckCircle, Copy } from 'lucide-react';
 import Link from 'next/link';
 
 interface Usage {
@@ -20,6 +20,7 @@ interface Customer {
   created_at: string;
   requests_month?: number;
   daily_usage?: Usage[];
+  api_key?: string;
 }
 
 export default function CustomerDetail({ params }: { params: Promise<{ id: string }> }) {
@@ -36,6 +37,11 @@ export default function CustomerDetail({ params }: { params: Promise<{ id: strin
   useEffect(() => {
     loadCustomer();
   }, [unwrappedParams.id]);
+
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+    alert('API Key copied to clipboard!');
+  };
 
   const loadCustomer = async () => {
     try {
@@ -152,11 +158,24 @@ export default function CustomerDetail({ params }: { params: Promise<{ id: strin
             <h4 className="text-emerald-800 font-medium mb-2">New API Key Generated</h4>
             <div className="flex items-center justify-between bg-white p-2 border border-emerald-100 rounded">
               <code className="text-sm text-gray-800 break-all">{newKey}</code>
+              <button onClick={() => copyToClipboard(newKey)} className="p-2 hover:bg-gray-100 rounded-md transition-colors" title="Copy to clipboard">
+                <Copy size={16} className="text-gray-500" />
+              </button>
             </div>
-            <p className="text-sm text-emerald-600 mt-2 text-center font-medium">Please copy this key now. It will not be shown again.</p>
           </div>
         ) : (
-          <p className="text-gray-500 text-sm">The API key is securely hashed in the database and cannot be viewed. If the customer lost their key, generate a new one.</p>
+          <div className="bg-gray-50 border border-gray-200 p-4 rounded-lg">
+            <h4 className="text-gray-700 font-medium mb-2">Current API Key</h4>
+            <div className="flex items-center justify-between bg-white p-2 border border-gray-200 rounded">
+              <code className="text-sm text-gray-800 break-all">{customer.api_key || 'Not available'}</code>
+              {customer.api_key && (
+                <button onClick={() => copyToClipboard(customer.api_key!)} className="p-2 hover:bg-gray-100 rounded-md transition-colors" title="Copy to clipboard">
+                  <Copy size={16} className="text-gray-500" />
+                </button>
+              )}
+            </div>
+            <p className="text-sm text-amber-600 mt-2 font-medium">Warning: Due to a recent setting change, older keys may show as hashed. Rotate the key to generate a new viewable plain text key.</p>
+          </div>
         )}
       </div>
 

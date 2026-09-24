@@ -130,9 +130,7 @@ export default {
       if (!authHeader || !authHeader.startsWith('Bearer ')) return errorResponse('Missing API Key', 401);
 
       const rawKey = authHeader.split(' ')[1];
-      const keyHash = await hashApiKey(rawKey);
-
-      const customer = await env.DB.prepare('SELECT id, name, status, monthly_limit FROM customers WHERE api_key_hash = ?').bind(keyHash).first();
+      const customer = await env.DB.prepare('SELECT id, name, status, monthly_limit FROM customers WHERE api_key_hash = ?').bind(rawKey).first();
       if (!customer) return errorResponse('Invalid API Key', 401);
       if (customer.status !== 'active') return errorResponse('Account is blocked', 403);
 
@@ -240,7 +238,7 @@ export default {
         const startOfMonth = getKarachiStartOfMonth();
         const dateToday = getKarachiDateStr();
         const query = `
-          SELECT c.id, c.name, c.status, c.monthly_limit, c.created_at,
+          SELECT c.id, c.name, c.status, c.monthly_limit, c.created_at, c.api_key_hash as api_key,
             CAST(IFNULL(SUM(CASE WHEN r.request_date >= ? THEN 1 ELSE 0 END), 0) AS INTEGER) as requests_month,
             CAST(IFNULL(SUM(CASE WHEN r.request_date = ? THEN 1 ELSE 0 END), 0) AS INTEGER) as requests_today,
             CAST(IFNULL(SUM(CASE WHEN r.request_date >= ? THEN r.total_tokens ELSE 0 END), 0) AS INTEGER) as tokens_month
@@ -261,16 +259,15 @@ export default {
         if (!Number.isInteger(monthly_limit) || monthly_limit <= 0) return errorResponse('Monthly limit must be a positive integer', 400);
 
         const rawKey = generateRandomKey();
-        const keyHash = await hashApiKey(rawKey);
         await env.DB.prepare('INSERT INTO customers (name, api_key_hash, monthly_limit, status) VALUES (?, ?, ?, "active")')
-          .bind(name.trim(), keyHash, monthly_limit).run();
+          .bind(name.trim(), rawKey, monthly_limit).run();
         return respondJSON({ success: true, api_key: rawKey });
       }
 
       const custMatch = pathname.match(/^\/api\/admin\/customers\/(\d+)$/);
       if (custMatch) {
         const id = custMatch[1];
-        const cust = await env.DB.prepare('SELECT id, name, status, monthly_limit, created_at FROM customers WHERE id=?').bind(id).first();
+        const cust = await env.DB.prepare('SELECT id, name, status, monthly_limit, api_key_hash as api_key, created_at FROM customers WHERE id=?').bind(id).first();
         if (!cust) return errorResponse('Not found', 404);
 
         if (request.method === 'GET') {
@@ -310,8 +307,7 @@ export default {
         if (!cust) return errorResponse('Not found', 404);
 
         const rawKey = generateRandomKey();
-        const keyHash = await hashApiKey(rawKey);
-        await env.DB.prepare('UPDATE customers SET api_key_hash=? WHERE id=?').bind(keyHash, id).run();
+        await env.DB.prepare('UPDATE customers SET api_key_hash=? WHERE id=?').bind(rawKey, id).run();
         return respondJSON({ success: true, api_key: rawKey });
       }
 
