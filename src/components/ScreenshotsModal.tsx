@@ -24,7 +24,7 @@ export default function ScreenshotsModal({ isOpen, onClose, screenshots, project
   useEffect(() => {
     if (isOpen) {
       document.body.style.overflow = "hidden";
-      setIsAutoPlaying(true); // Reset to playing when opened
+      setTimeout(() => setIsAutoPlaying(true), 0); // Reset to playing when opened
     } else {
       document.body.style.overflow = "auto";
     }

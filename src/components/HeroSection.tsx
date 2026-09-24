@@ -67,7 +67,7 @@ export default function HeroSection() {
             className="inline-flex items-center justify-center whitespace-nowrap rounded-md font-semibold bg-primary text-primary-foreground hover:bg-transparent hover:text-primary border border-primary transition-all duration-300 h-12 px-8 shadow-lg shadow-primary/20 hover:shadow-none"
           >
             <Whatsapp className="mr-2 h-5 w-5" />
-            Let's Talk
+            Let&apos;s Talk
           </a>
           <a
             href="/cv.pdf"

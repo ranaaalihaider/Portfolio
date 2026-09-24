@@ -19,8 +19,8 @@ export default function UsagePage() {
       setLoading(true);
       const data = await fetchApi(`/api/admin/usage?period=${period}&customer=${customerId}`);
       setStats(data);
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : String(err));
     } finally {
       setLoading(false);
     }

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Menu, X } from "lucide-react";
 import { personalInfo } from "@/data/portfolio";
+import Link from "next/link";
 
 export default function Navbar() {
   const [isOpen, setIsOpen] = useState(false);
@@ -14,9 +15,9 @@ export default function Navbar() {
   return (
     <div className="sticky top-0 z-50 bg-background/80 backdrop-blur-md border-b border-white/5">
       <div className="flex justify-between items-center py-5 container mx-auto px-4 md:px-8">
-        <a className="text-2xl font-bold tracking-tighter" href="/">
+        <Link className="text-2xl font-bold tracking-tighter" href="/">
           <span className="text-primary">A</span>li <span className="text-primary">H</span>aider
-        </a>
+        </Link>
         <nav className="hidden lg:flex items-center space-x-6">
           <a href="#about" className="text-sm font-medium hover:text-primary transition-colors">About</a>
           <a href="#experience" className="text-sm font-medium hover:text-primary transition-colors">Experience</a>

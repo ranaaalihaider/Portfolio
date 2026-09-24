@@ -31,10 +31,10 @@ export default function ContactSection() {
             transition={{ duration: 0.5, delay: 0.2 }}
             className="space-y-8"
           >
-            <h3 className="text-2xl font-bold">Let's build something great together.</h3>
+            <h3 className="text-2xl font-bold">Let&apos;s build something great together.</h3>
             <p className="text-muted-foreground leading-relaxed">
-              I'm currently available for freelance projects and full-time opportunities.
-              Whether you have a question or just want to say hi, I'll try my best to get back to you!
+              I&apos;m currently available for freelance projects and full-time opportunities.
+              Whether you have a question or just want to say hi, I&apos;ll try my best to get back to you!
             </p>
 
             <div className="space-y-4">
@@ -96,7 +96,7 @@ export default function ContactSection() {
             <div>
               <h3 className="text-2xl font-bold mb-2">Prefer WhatsApp?</h3>
               <p className="text-muted-foreground mb-8">
-                Send me a direct message and I'll reply instantly.
+                Send me a direct message and I&apos;ll reply instantly.
               </p>
             </div>
             

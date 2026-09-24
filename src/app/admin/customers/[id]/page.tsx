@@ -5,10 +5,27 @@ import { fetchApi } from '@/lib/api';
 import { ArrowLeft, Edit2, RotateCcw, Ban, CheckCircle } from 'lucide-react';
 import Link from 'next/link';
 
+interface Usage {
+  date: string;
+  requests: number;
+  input_tokens: number;
+  output_tokens: number;
+  total_tokens: number;
+}
+interface Customer {
+  id: number;
+  name: string;
+  status: string;
+  monthly_limit: number;
+  created_at: string;
+  requests_month?: number;
+  daily_usage?: Usage[];
+}
+
 export default function CustomerDetail({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter();
   const unwrappedParams = use(params);
-  const [customer, setCustomer] = useState<any>(null);
+  const [customer, setCustomer] = useState<Customer | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [rotating, setRotating] = useState(false);
@@ -25,14 +42,15 @@ export default function CustomerDetail({ params }: { params: Promise<{ id: strin
       setLoading(true);
       const data = await fetchApi(`/api/admin/customers/${unwrappedParams.id}`);
       setCustomer(data);
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : String(err));
     } finally {
       setLoading(false);
     }
   };
 
   const toggleStatus = async () => {
+    if (!customer) return;
     if (!confirm(`Are you sure you want to ${customer.status === 'active' ? 'block' : 'activate'} this customer?`)) return;
     setUpdating(true);
     try {
@@ -41,15 +59,16 @@ export default function CustomerDetail({ params }: { params: Promise<{ id: strin
         body: JSON.stringify({ status: customer.status === 'active' ? 'blocked' : 'active' })
       });
       await loadCustomer();
-    } catch (err: any) {
-      alert(err.message);
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : String(err));
     } finally {
       setUpdating(false);
     }
   };
 
   const updateLimit = async () => {
-    const limit = prompt('Enter new monthly limit:', customer.monthly_limit);
+    if (!customer) return;
+    const limit = prompt('Enter new monthly limit:', customer.monthly_limit.toString());
     if (!limit || isNaN(Number(limit))) return;
     setUpdating(true);
     try {
@@ -58,8 +77,8 @@ export default function CustomerDetail({ params }: { params: Promise<{ id: strin
         body: JSON.stringify({ monthly_limit: Number(limit) })
       });
       await loadCustomer();
-    } catch (err: any) {
-      alert(err.message);
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : String(err));
     } finally {
       setUpdating(false);
     }
@@ -71,8 +90,8 @@ export default function CustomerDetail({ params }: { params: Promise<{ id: strin
     try {
       const result = await fetchApi(`/api/admin/customers/${unwrappedParams.id}/rotate-key`, { method: 'POST' });
       setNewKey(result.api_key);
-    } catch (err: any) {
-      alert(err.message);
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : String(err));
     } finally {
       setRotating(false);
     }
@@ -156,8 +175,8 @@ export default function CustomerDetail({ params }: { params: Promise<{ id: strin
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
-            {customer.daily_usage?.length > 0 ? (
-              customer.daily_usage.map((usage: any, idx: number) => (
+            {customer.daily_usage && customer.daily_usage.length > 0 ? (
+              customer.daily_usage.map((usage: Usage, idx: number) => (
                 <tr key={idx} className="hover:bg-gray-50">
                   <td className="p-4 text-gray-900">{usage.date}</td>
                   <td className="p-4 text-gray-600">{usage.requests}</td>

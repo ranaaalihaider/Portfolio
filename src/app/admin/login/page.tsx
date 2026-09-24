@@ -23,8 +23,8 @@ export default function Login() {
       });
       localStorage.setItem('adminToken', data.token);
       router.push('/admin');
-    } catch (err: any) {
-      setError(err.message || 'Login failed');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : String(err));
     } finally {
       setLoading(false);
     }
