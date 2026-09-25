@@ -286,6 +286,17 @@ function sleep(ms) {
   );
 }
 
+/* =========================================================
+ * AI QUESTION CACHE HELPERS
+ * ========================================================= */
+
+function normalizeQuestion(question) {
+  return String(question || '')
+    .toLowerCase()
+    .trim()
+    .replace(/[?!.,،۔]+/g, '')
+    .replace(/\s+/g, ' ');
+}
 
 /* =========================================================
  * COMPACT RICH DATABASE SCHEMA + BUSINESS SEMANTICS
@@ -976,6 +987,7 @@ function validateSql(sql) {
     cleanSql
   };
 }
+
 
 
 /* =========================================================
@@ -1745,12 +1757,14 @@ export default {
       const schemaRecord =
         await env.DB
           .prepare(`
-            SELECT
-              schema_hash,
-              updated_at
-            FROM customer_schemas
-            WHERE customer_id = ?
-          `)
+      SELECT
+        schema_json,
+        schema_hash
+
+      FROM customer_schemas
+
+      WHERE customer_id = ?
+    `)
           .bind(
             customer.id
           )
@@ -2065,6 +2079,71 @@ export default {
         );
       }
 
+      /* ===================================================
+ * SQL CACHE LOOKUP
+ * =================================================== */
+
+      const normalizedQuestion =
+        normalizeQuestion(question);
+
+      const questionHash =
+        await sha256Hex(normalizedQuestion);
+
+      const cachedQuery =
+        await env.DB
+          .prepare(`
+      SELECT
+        id,
+        sql_text
+      FROM ai_sql_cache
+      WHERE customer_id = ?
+        AND question_hash = ?
+        AND schema_hash = ?
+      LIMIT 1
+    `)
+          .bind(
+            customer.id,
+            questionHash,
+            schemaRecord.schema_hash
+          )
+          .first();
+
+
+      if (cachedQuery?.sql_text) {
+
+        const cachedValidation =
+          validateSql(cachedQuery.sql_text);
+
+        if (cachedValidation.isValid) {
+
+          await env.DB
+            .prepare(`
+        UPDATE ai_sql_cache
+        SET
+          hit_count = hit_count + 1,
+          last_used_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `)
+            .bind(cachedQuery.id)
+            .run();
+
+          return respondJSON({
+            success: true,
+            sql: cachedValidation.cleanSql,
+            cache_hit: true
+          });
+        }
+
+        await env.DB
+          .prepare(`
+      DELETE FROM ai_sql_cache
+      WHERE id = ?
+    `)
+          .bind(cachedQuery.id)
+          .run();
+      }
+
+
 
       /* ===================================================
        * GROQ
@@ -2288,6 +2367,59 @@ export default {
           );
         }
 
+        /* =================================================
+ * SAVE VALID SQL TO CACHE
+ * ================================================= */
+
+        try {
+
+          await env.DB
+            .prepare(`
+      INSERT INTO ai_sql_cache
+      (
+        customer_id,
+        question_hash,
+        normalized_question,
+        sql_text,
+        schema_hash,
+        hit_count,
+        created_at,
+        last_used_at
+      )
+      VALUES (?, ?, ?, ?, ?, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+
+      ON CONFLICT(customer_id, question_hash, schema_hash)
+
+      DO UPDATE SET
+        sql_text = excluded.sql_text,
+        normalized_question = excluded.normalized_question,
+        last_used_at = CURRENT_TIMESTAMP
+    `)
+            .bind(
+              customer.id,
+              questionHash,
+              normalizedQuestion,
+              validation.cleanSql,
+              schemaRecord.schema_hash
+            )
+            .run();
+
+        } catch (cacheError) {
+
+          /*
+           * Cache failure must NEVER break AI.
+           */
+
+          console.error(
+            'Failed to save AI SQL cache',
+            {
+              message:
+                cacheError instanceof Error
+                  ? cacheError.message
+                  : 'Unknown cache error'
+            }
+          );
+        }
 
         /* =================================================
          * LOG SUCCESS
