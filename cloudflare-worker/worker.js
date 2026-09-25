@@ -1,6 +1,21 @@
 /**
  * COMPLETE CLOUDFLARE WORKER
+ *
+ * AI flow:
+ * Laravel -> Worker -> Groq -> SQL -> Laravel
+ *
+ * Important:
+ * - Worker NEVER executes customer SQL.
+ * - Full customer schema remains stored in D1.
+ * - Only a compact schema is sent to Groq.
+ * - Groq 429 gets exactly ONE retry after 1 second.
+ * - Internal Groq errors are NOT exposed to customers.
  */
+
+
+/* =========================================================
+ * BASE64 / JWT HELPERS
+ * ========================================================= */
 
 function base64UrlEncode(str) {
   return btoa(str)
@@ -10,7 +25,9 @@ function base64UrlEncode(str) {
 }
 
 function base64UrlDecode(str) {
-  let base64 = str.replace(/-/g, '+').replace(/_/g, '/');
+  let base64 = str
+    .replace(/-/g, '+')
+    .replace(/_/g, '/');
 
   const pad = base64.length % 4;
 
@@ -27,33 +44,45 @@ async function signJWT(payload, secret) {
     typ: 'JWT'
   };
 
-  const encodedHeader = base64UrlEncode(JSON.stringify(header));
-  const encodedPayload = base64UrlEncode(JSON.stringify(payload));
+  const encodedHeader =
+    base64UrlEncode(JSON.stringify(header));
 
-  const key = await crypto.subtle.importKey(
-    'raw',
-    new TextEncoder().encode(secret),
-    {
-      name: 'HMAC',
-      hash: 'SHA-256'
-    },
-    false,
-    ['sign']
+  const encodedPayload =
+    base64UrlEncode(JSON.stringify(payload));
+
+  const key =
+    await crypto.subtle.importKey(
+      'raw',
+      new TextEncoder().encode(secret),
+      {
+        name: 'HMAC',
+        hash: 'SHA-256'
+      },
+      false,
+      ['sign']
+    );
+
+  const signature =
+    await crypto.subtle.sign(
+      'HMAC',
+      key,
+      new TextEncoder().encode(
+        `${encodedHeader}.${encodedPayload}`
+      )
+    );
+
+  const encodedSignature =
+    base64UrlEncode(
+      String.fromCharCode(
+        ...new Uint8Array(signature)
+      )
+    );
+
+  return (
+    `${encodedHeader}.` +
+    `${encodedPayload}.` +
+    `${encodedSignature}`
   );
-
-  const signature = await crypto.subtle.sign(
-    'HMAC',
-    key,
-    new TextEncoder().encode(
-      `${encodedHeader}.${encodedPayload}`
-    )
-  );
-
-  const encodedSignature = base64UrlEncode(
-    String.fromCharCode(...new Uint8Array(signature))
-  );
-
-  return `${encodedHeader}.${encodedPayload}.${encodedSignature}`;
 }
 
 async function verifyJWT(token, secret) {
@@ -64,85 +93,140 @@ async function verifyJWT(token, secret) {
       return null;
     }
 
-    const [header, payload, signature] = parts;
+    const [
+      header,
+      payload,
+      signature
+    ] = parts;
 
-    const key = await crypto.subtle.importKey(
-      'raw',
-      new TextEncoder().encode(secret),
-      {
-        name: 'HMAC',
-        hash: 'SHA-256'
-      },
-      false,
-      ['verify']
-    );
+    const key =
+      await crypto.subtle.importKey(
+        'raw',
+        new TextEncoder().encode(secret),
+        {
+          name: 'HMAC',
+          hash: 'SHA-256'
+        },
+        false,
+        ['verify']
+      );
 
-    const signatureBytes = new Uint8Array(
-      base64UrlDecode(signature)
-        .split('')
-        .map(c => c.charCodeAt(0))
-    );
+    const signatureBytes =
+      new Uint8Array(
+        base64UrlDecode(signature)
+          .split('')
+          .map(
+            c => c.charCodeAt(0)
+          )
+      );
 
-    const isValid = await crypto.subtle.verify(
-      'HMAC',
-      key,
-      signatureBytes,
-      new TextEncoder().encode(`${header}.${payload}`)
-    );
+    const isValid =
+      await crypto.subtle.verify(
+        'HMAC',
+        key,
+        signatureBytes,
+        new TextEncoder().encode(
+          `${header}.${payload}`
+        )
+      );
 
     if (!isValid) {
       return null;
     }
 
-    return JSON.parse(base64UrlDecode(payload));
+    return JSON.parse(
+      base64UrlDecode(payload)
+    );
 
   } catch (e) {
     return null;
   }
 }
 
+
+/* =========================================================
+ * HASH HELPERS
+ * ========================================================= */
+
 /*
  * Kept for future API-key hashing migration.
- * Current customers still use the existing raw-key behavior.
+ *
+ * Current customer authentication behavior is intentionally
+ * preserved because existing keys are currently stored
+ * directly in api_key_hash.
  */
 async function hashApiKey(key) {
-  const hashBuffer = await crypto.subtle.digest(
-    'SHA-256',
-    new TextEncoder().encode(key)
-  );
+  const hashBuffer =
+    await crypto.subtle.digest(
+      'SHA-256',
+      new TextEncoder().encode(key)
+    );
 
-  return Array.from(new Uint8Array(hashBuffer))
-    .map(b => b.toString(16).padStart(2, '0'))
+  return Array
+    .from(new Uint8Array(hashBuffer))
+    .map(
+      b => b
+        .toString(16)
+        .padStart(2, '0')
+    )
     .join('');
 }
+
 
 /*
- * Used for hashing uploaded database schemas.
+ * Used for uploaded schema hashes.
  */
 async function sha256Hex(str) {
-  const hashBuffer = await crypto.subtle.digest(
-    'SHA-256',
-    new TextEncoder().encode(str)
-  );
+  const hashBuffer =
+    await crypto.subtle.digest(
+      'SHA-256',
+      new TextEncoder().encode(str)
+    );
 
-  return Array.from(new Uint8Array(hashBuffer))
-    .map(b => b.toString(16).padStart(2, '0'))
+  return Array
+    .from(new Uint8Array(hashBuffer))
+    .map(
+      b => b
+        .toString(16)
+        .padStart(2, '0')
+    )
     .join('');
 }
 
+
+/* =========================================================
+ * CUSTOMER KEY GENERATION
+ * ========================================================= */
+
 function generateRandomKey() {
-  const array = new Uint8Array(32);
+  const array =
+    new Uint8Array(32);
 
   crypto.getRandomValues(array);
 
-  return 'cust_' +
-    Array.from(array)
-      .map(b => b.toString(16).padStart(2, '0'))
-      .join('');
+  return (
+    'cust_' +
+    Array
+      .from(array)
+      .map(
+        b => b
+          .toString(16)
+          .padStart(2, '0')
+      )
+      .join('')
+  );
 }
 
+
+/* =========================================================
+ * DATE / TIME HELPERS
+ * ========================================================= */
+
 function getKarachiDateStr(dateInput) {
-  const d = dateInput ? new Date(dateInput) : new Date();
+  const d =
+    dateInput
+      ? new Date(dateInput)
+      : new Date();
 
   return new Intl.DateTimeFormat(
     'en-CA',
@@ -169,17 +253,21 @@ function getKarachiTimeStr() {
 }
 
 function getKarachiStartOfMonth() {
-  const formatter = new Intl.DateTimeFormat(
-    'en-CA',
-    {
-      timeZone: 'Asia/Karachi',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit'
-    }
-  );
+  const formatter =
+    new Intl.DateTimeFormat(
+      'en-CA',
+      {
+        timeZone: 'Asia/Karachi',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+      }
+    );
 
-  const parts = formatter.formatToParts(new Date());
+  const parts =
+    formatter.formatToParts(
+      new Date()
+    );
 
   let y = '';
   let m = '';
@@ -198,16 +286,154 @@ function getKarachiStartOfMonth() {
 }
 
 function isValidPeriod(p) {
-  return ['today', '7', '30'].includes(p);
+  return [
+    'today',
+    '7',
+    '30'
+  ].includes(p);
 }
 
-function validateSql(sql) {
-  let cleanSql = sql
-    .replace(/```sql/ig, '')
-    .replace(/```/g, '')
-    .trim();
 
-  const upperSql = cleanSql.toUpperCase();
+/* =========================================================
+ * SLEEP HELPER
+ * Used ONLY for one Groq 429 retry.
+ * ========================================================= */
+
+function sleep(ms) {
+  return new Promise(
+    resolve => setTimeout(resolve, ms)
+  );
+}
+
+
+/* =========================================================
+ * COMPACT DATABASE SCHEMA
+ * =========================================================
+ *
+ * Full schema stays stored in D1.
+ *
+ * Example full schema:
+ *
+ * {
+ *   tables: {
+ *     customers: {
+ *       columns: [
+ *         { name: "id", type: "bigint" },
+ *         { name: "name", type: "varchar" },
+ *         { name: "balance", type: "decimal" }
+ *       ]
+ *     }
+ *   },
+ *   relationships: [...]
+ * }
+ *
+ * Becomes:
+ *
+ * customers(id,name,balance)
+ *
+ * RELATIONSHIPS:
+ * sales.customer_id->customers.id
+ *
+ * This significantly reduces tokens sent to Groq.
+ * ========================================================= */
+
+function compactSchema(schema) {
+  const lines = [];
+
+  if (
+    schema &&
+    schema.tables &&
+    typeof schema.tables === 'object'
+  ) {
+
+    for (
+      const [
+        tableName,
+        tableData
+      ]
+      of Object.entries(schema.tables)
+    ) {
+
+      const columns =
+        Array.isArray(
+          tableData?.columns
+        )
+          ? tableData.columns
+            .map(
+              column =>
+                typeof column === 'string'
+                  ? column
+                  : column?.name
+            )
+            .filter(Boolean)
+          : [];
+
+      /*
+       * Keep the table even if columns happen
+       * to be empty.
+       */
+      lines.push(
+        `${tableName}(${columns.join(',')})`
+      );
+    }
+  }
+
+
+  /*
+   * Preserve foreign-key / relationship
+   * information because it is important
+   * for JOIN generation.
+   */
+  if (
+    Array.isArray(
+      schema?.relationships
+    ) &&
+    schema.relationships.length > 0
+  ) {
+
+    lines.push('');
+    lines.push('RELATIONSHIPS:');
+
+    for (
+      const rel
+      of schema.relationships
+    ) {
+
+      if (
+        rel?.from_table &&
+        rel?.from_column &&
+        rel?.to_table &&
+        rel?.to_column
+      ) {
+
+        lines.push(
+          `${rel.from_table}.` +
+          `${rel.from_column}` +
+          '->' +
+          `${rel.to_table}.` +
+          `${rel.to_column}`
+        );
+      }
+    }
+  }
+
+  return lines.join('\n');
+}
+
+
+/* =========================================================
+ * SQL VALIDATION
+ * ========================================================= */
+
+function validateSql(sql) {
+  let cleanSql =
+    sql
+      .replace(/```sql/ig, '')
+      .replace(/```/g, '')
+      .trim();
+
+  const upperSql =
+    cleanSql.toUpperCase();
 
   if (
     !upperSql.startsWith('SELECT') &&
@@ -215,7 +441,8 @@ function validateSql(sql) {
   ) {
     return {
       isValid: false,
-      error: 'SQL must start with SELECT or WITH.'
+      error:
+        'SQL must start with SELECT or WITH.'
     };
   }
 
@@ -225,11 +452,13 @@ function validateSql(sql) {
   ) {
     return {
       isValid: false,
-      error: 'SQL comments are not allowed.'
+      error:
+        'SQL comments are not allowed.'
     };
   }
 
-  const segments = cleanSql.split(';');
+  const segments =
+    cleanSql.split(';');
 
   if (
     segments.length > 2 ||
@@ -240,7 +469,8 @@ function validateSql(sql) {
   ) {
     return {
       isValid: false,
-      error: 'Multiple SQL statements are not allowed.'
+      error:
+        'Multiple SQL statements are not allowed.'
     };
   }
 
@@ -257,13 +487,21 @@ function validateSql(sql) {
     'REVOKE'
   ];
 
-  const tokens = upperSql.split(/[\s,();]+/);
+  const tokens =
+    upperSql.split(
+      /[\s,();]+/
+    );
 
   for (const token of tokens) {
-    if (dangerousKeywords.includes(token)) {
+    if (
+      dangerousKeywords.includes(
+        token
+      )
+    ) {
       return {
         isValid: false,
-        error: `Dangerous SQL keyword detected: ${token}`
+        error:
+          `Dangerous SQL keyword detected: ${token}`
       };
     }
   }
@@ -274,20 +512,159 @@ function validateSql(sql) {
   };
 }
 
+
+/* =========================================================
+ * GROQ REQUEST
+ * =========================================================
+ *
+ * Makes ONE normal request.
+ *
+ * If Groq returns HTTP 429:
+ * - wait ~1 second
+ * - retry exactly ONCE
+ *
+ * No infinite retry.
+ * ========================================================= */
+
+async function callGroq(
+  env,
+  compactCustomerSchema,
+  question
+) {
+
+  const requestBody = {
+    model:
+      'openai/gpt-oss-20b',
+
+    temperature: 0.1,
+
+    messages: [
+      {
+        role: 'system',
+
+        content:
+          `You generate read-only MySQL queries.
+
+Use ONLY the database schema provided below.
+
+Never invent tables or columns.
+
+Generate exactly one read-only SELECT or WITH query.
+
+Never generate INSERT, UPDATE, DELETE, DROP, ALTER, CREATE, TRUNCATE, REPLACE, GRANT or REVOKE.
+
+Return SQL only.
+
+No markdown.
+No explanation.
+
+DATABASE SCHEMA:
+${compactCustomerSchema}`
+      },
+
+      {
+        role: 'user',
+        content: question.trim()
+      }
+    ]
+  };
+
+
+  const makeRequest =
+    async () => {
+
+      return fetch(
+        'https://api.groq.com/openai/v1/chat/completions',
+        {
+          method: 'POST',
+
+          headers: {
+            'Authorization':
+              `Bearer ${env.GROQ_API_KEY}`,
+
+            'Content-Type':
+              'application/json'
+          },
+
+          body:
+            JSON.stringify(
+              requestBody
+            )
+        }
+      );
+    };
+
+
+  /*
+   * FIRST ATTEMPT
+   */
+
+  let response =
+    await makeRequest();
+
+
+  /*
+   * ONLY retry HTTP 429.
+   *
+   * Exactly one retry.
+   */
+
+  if (response.status === 429) {
+
+    /*
+     * Consume response body before retrying.
+     */
+    try {
+      await response.text();
+    } catch (e) {
+      // Ignore body-reading failure.
+    }
+
+    /*
+     * Wait approximately one second.
+     */
+    await sleep(1000);
+
+
+    /*
+     * SECOND AND FINAL ATTEMPT
+     */
+    response =
+      await makeRequest();
+  }
+
+
+  /*
+   * No further retries.
+   */
+
+  return response;
+}
+
+
+/* =========================================================
+ * WORKER
+ * ========================================================= */
+
 export default {
 
   async fetch(request, env, ctx) {
 
-    const url = new URL(request.url);
-    const pathname = url.pathname;
+    const url =
+      new URL(request.url);
 
-    /*
-     * ==============================
+    const pathname =
+      url.pathname;
+
+
+    /* =====================================================
      * CORS
-     * ==============================
-     */
+     * ===================================================== */
 
-    const origin = request.headers.get('Origin') || '';
+    const origin =
+      request.headers.get(
+        'Origin'
+      ) || '';
 
     const allowedOrigins = [
       'https://alihaider.site',
@@ -306,40 +683,52 @@ export default {
         'no-store, no-cache, must-revalidate, proxy-revalidate'
     };
 
-    /*
-     * Only approved browser origins receive
-     * Access-Control-Allow-Origin.
-     *
-     * Server-to-server Laravel requests normally
-     * do not send an Origin header and still work.
-     */
     if (
       origin &&
-      allowedOrigins.includes(origin)
+      allowedOrigins.includes(
+        origin
+      )
     ) {
-      corsHeaders['Access-Control-Allow-Origin'] = origin;
+      corsHeaders[
+        'Access-Control-Allow-Origin'
+      ] = origin;
     }
 
-    if (request.method === 'OPTIONS') {
 
-      /*
-       * Reject browser preflight from an
-       * unapproved origin.
-       */
+    /*
+     * Browser preflight.
+     */
+    if (
+      request.method === 'OPTIONS'
+    ) {
+
       if (
         origin &&
-        !allowedOrigins.includes(origin)
+        !allowedOrigins.includes(
+          origin
+        )
       ) {
-        return new Response(null, {
-          status: 403
-        });
+        return new Response(
+          null,
+          {
+            status: 403
+          }
+        );
       }
 
-      return new Response(null, {
-        status: 204,
-        headers: corsHeaders
-      });
+      return new Response(
+        null,
+        {
+          status: 204,
+          headers: corsHeaders
+        }
+      );
     }
+
+
+    /* =====================================================
+     * RESPONSE HELPERS
+     * ===================================================== */
 
     const respondJSON = (
       data,
@@ -350,13 +739,17 @@ export default {
         JSON.stringify(data),
         {
           status,
+
           headers: {
-            'Content-Type': 'application/json',
+            'Content-Type':
+              'application/json',
+
             ...corsHeaders
           }
         }
       );
     };
+
 
     const errorResponse = (
       msg,
@@ -373,24 +766,28 @@ export default {
     };
 
 
-    /*
-     * =========================================================
+    /* =====================================================
      * AI SCHEMA UPLOAD
+     *
      * POST /api/ai/schema
-     * =========================================================
-     */
+     * ===================================================== */
 
     if (
-      pathname === '/api/ai/schema' &&
+      pathname ===
+      '/api/ai/schema' &&
       request.method === 'POST'
     ) {
 
       const authHeader =
-        request.headers.get('Authorization');
+        request.headers.get(
+          'Authorization'
+        );
 
       if (
         !authHeader ||
-        !authHeader.startsWith('Bearer ')
+        !authHeader.startsWith(
+          'Bearer '
+        )
       ) {
         return errorResponse(
           'Missing API Key',
@@ -399,7 +796,9 @@ export default {
       }
 
       const rawKey =
-        authHeader.slice(7).trim();
+        authHeader
+          .slice(7)
+          .trim();
 
       if (!rawKey) {
         return errorResponse(
@@ -408,18 +807,24 @@ export default {
         );
       }
 
+
       /*
-       * Existing customer authentication behavior
+       * Existing customer-key behavior
        * intentionally preserved.
        */
-      const customer = await env.DB
-        .prepare(`
-          SELECT id, name, status
-          FROM customers
-          WHERE api_key_hash = ?
-        `)
-        .bind(rawKey)
-        .first();
+      const customer =
+        await env.DB
+          .prepare(`
+            SELECT
+              id,
+              name,
+              status
+            FROM customers
+            WHERE api_key_hash = ?
+          `)
+          .bind(rawKey)
+          .first();
+
 
       if (!customer) {
         return errorResponse(
@@ -428,21 +833,33 @@ export default {
         );
       }
 
-      if (customer.status !== 'active') {
+
+      if (
+        customer.status !==
+        'active'
+      ) {
         return errorResponse(
           'Account is blocked',
           403
         );
       }
 
-      const body = await request
-        .json()
-        .catch(() => ({}));
+
+      const body =
+        await request
+          .json()
+          .catch(
+            () => ({})
+          );
+
 
       if (
         !body.schema ||
-        typeof body.schema !== 'object' ||
-        Array.isArray(body.schema)
+        typeof body.schema !==
+        'object' ||
+        Array.isArray(
+          body.schema
+        )
       ) {
         return errorResponse(
           'Invalid schema format',
@@ -450,26 +867,37 @@ export default {
         );
       }
 
+
       let schemaStr;
 
       try {
-        schemaStr = JSON.stringify(
-          body.schema
-        );
+
+        schemaStr =
+          JSON.stringify(
+            body.schema
+          );
+
       } catch (e) {
+
         return errorResponse(
           'Schema could not be serialized',
           400
         );
       }
 
+
       /*
-       * Maximum schema size = 500 KB
+       * Maximum schema size:
+       * 500 KB
        */
+
       const schemaBytes =
-        new TextEncoder().encode(
-          schemaStr
-        ).length;
+        new TextEncoder()
+          .encode(
+            schemaStr
+          )
+          .length;
+
 
       if (
         schemaBytes >
@@ -481,15 +909,19 @@ export default {
         );
       }
 
+
       const schemaHash =
-        await sha256Hex(schemaStr);
+        await sha256Hex(
+          schemaStr
+        );
+
 
       /*
-       * customer.id comes ONLY from authenticated
-       * API key.
+       * Full schema is stored in D1.
        *
-       * Client cannot choose customer_id.
+       * We DO NOT compact it here.
        */
+
       await env.DB
         .prepare(`
           INSERT INTO customer_schemas
@@ -504,9 +936,14 @@ export default {
           ON CONFLICT(customer_id)
 
           DO UPDATE SET
-            schema_json = excluded.schema_json,
-            schema_hash = excluded.schema_hash,
-            updated_at = CURRENT_TIMESTAMP
+            schema_json =
+              excluded.schema_json,
+
+            schema_hash =
+              excluded.schema_hash,
+
+            updated_at =
+              CURRENT_TIMESTAMP
         `)
         .bind(
           customer.id,
@@ -515,32 +952,40 @@ export default {
         )
         .run();
 
+
       return respondJSON({
         success: true,
-        message: 'Schema synced',
-        schema_hash: schemaHash
+        message:
+          'Schema synced',
+        schema_hash:
+          schemaHash
       });
     }
 
 
-    /*
-     * =========================================================
+    /* =====================================================
      * AI SCHEMA STATUS
+     *
      * GET /api/ai/schema/status
-     * =========================================================
-     */
+     * ===================================================== */
 
     if (
-      pathname === '/api/ai/schema/status' &&
+      pathname ===
+      '/api/ai/schema/status' &&
       request.method === 'GET'
     ) {
 
       const authHeader =
-        request.headers.get('Authorization');
+        request.headers.get(
+          'Authorization'
+        );
+
 
       if (
         !authHeader ||
-        !authHeader.startsWith('Bearer ')
+        !authHeader.startsWith(
+          'Bearer '
+        )
       ) {
         return errorResponse(
           'Missing API Key',
@@ -548,8 +993,12 @@ export default {
         );
       }
 
+
       const rawKey =
-        authHeader.slice(7).trim();
+        authHeader
+          .slice(7)
+          .trim();
+
 
       if (!rawKey) {
         return errorResponse(
@@ -558,14 +1007,20 @@ export default {
         );
       }
 
-      const customer = await env.DB
-        .prepare(`
-          SELECT id, name, status
-          FROM customers
-          WHERE api_key_hash = ?
-        `)
-        .bind(rawKey)
-        .first();
+
+      const customer =
+        await env.DB
+          .prepare(`
+            SELECT
+              id,
+              name,
+              status
+            FROM customers
+            WHERE api_key_hash = ?
+          `)
+          .bind(rawKey)
+          .first();
+
 
       if (!customer) {
         return errorResponse(
@@ -574,23 +1029,32 @@ export default {
         );
       }
 
-      if (customer.status !== 'active') {
+
+      if (
+        customer.status !==
+        'active'
+      ) {
         return errorResponse(
           'Account is blocked',
           403
         );
       }
 
-      const schemaRecord = await env.DB
-        .prepare(`
-          SELECT
-            schema_hash,
-            updated_at
-          FROM customer_schemas
-          WHERE customer_id = ?
-        `)
-        .bind(customer.id)
-        .first();
+
+      const schemaRecord =
+        await env.DB
+          .prepare(`
+            SELECT
+              schema_hash,
+              updated_at
+            FROM customer_schemas
+            WHERE customer_id = ?
+          `)
+          .bind(
+            customer.id
+          )
+          .first();
+
 
       if (!schemaRecord) {
 
@@ -602,35 +1066,47 @@ export default {
         });
       }
 
+
       return respondJSON({
         success: true,
         configured: true,
+
         schema_hash:
           schemaRecord.schema_hash,
+
         updated_at:
           schemaRecord.updated_at
       });
     }
 
 
-    /*
-     * =========================================================
+    /* =====================================================
      * AI SQL GENERATION
+     *
      * POST /api/ai/sql
-     * =========================================================
-     */
+     * ===================================================== */
 
     if (
-      pathname === '/api/ai/sql' &&
+      pathname ===
+      '/api/ai/sql' &&
       request.method === 'POST'
     ) {
 
+      /* ---------------------------------------------------
+       * Customer Authentication
+       * --------------------------------------------------- */
+
       const authHeader =
-        request.headers.get('Authorization');
+        request.headers.get(
+          'Authorization'
+        );
+
 
       if (
         !authHeader ||
-        !authHeader.startsWith('Bearer ')
+        !authHeader.startsWith(
+          'Bearer '
+        )
       ) {
         return errorResponse(
           'Missing API Key',
@@ -638,8 +1114,12 @@ export default {
         );
       }
 
+
       const rawKey =
-        authHeader.slice(7).trim();
+        authHeader
+          .slice(7)
+          .trim();
+
 
       if (!rawKey) {
         return errorResponse(
@@ -648,18 +1128,21 @@ export default {
         );
       }
 
-      const customer = await env.DB
-        .prepare(`
-          SELECT
-            id,
-            name,
-            status,
-            monthly_limit
-          FROM customers
-          WHERE api_key_hash = ?
-        `)
-        .bind(rawKey)
-        .first();
+
+      const customer =
+        await env.DB
+          .prepare(`
+            SELECT
+              id,
+              name,
+              status,
+              monthly_limit
+            FROM customers
+            WHERE api_key_hash = ?
+          `)
+          .bind(rawKey)
+          .first();
+
 
       if (!customer) {
         return errorResponse(
@@ -668,7 +1151,11 @@ export default {
         );
       }
 
-      if (customer.status !== 'active') {
+
+      if (
+        customer.status !==
+        'active'
+      ) {
         return errorResponse(
           'Account is blocked',
           403
@@ -676,20 +1163,22 @@ export default {
       }
 
 
-      /*
-       * ==============================
-       * Monthly usage limit
-       * ==============================
-       */
+      /* ---------------------------------------------------
+       * Monthly Usage Limit
+       * --------------------------------------------------- */
 
       const startOfMonth =
         getKarachiStartOfMonth();
 
+
       const usageResult =
         await env.DB
           .prepare(`
-            SELECT COUNT(*) as count
+            SELECT
+              COUNT(*) as count
+
             FROM request_logs
+
             WHERE customer_id = ?
               AND status = "success"
               AND request_date >= ?
@@ -700,10 +1189,12 @@ export default {
           )
           .first();
 
+
       if (
         (usageResult?.count || 0) >=
         customer.monthly_limit
       ) {
+
         return errorResponse(
           'Monthly AI request limit reached.',
           429
@@ -711,31 +1202,37 @@ export default {
       }
 
 
-      /*
-       * ==============================
-       * Load THIS customer's schema
-       * ==============================
-       */
+      /* ---------------------------------------------------
+       * Load Full Customer Schema
+       * --------------------------------------------------- */
 
       const schemaRecord =
         await env.DB
           .prepare(`
-            SELECT schema_json
+            SELECT
+              schema_json
+
             FROM customer_schemas
+
             WHERE customer_id = ?
           `)
-          .bind(customer.id)
+          .bind(
+            customer.id
+          )
           .first();
+
 
       if (
         !schemaRecord ||
         !schemaRecord.schema_json
       ) {
+
         return errorResponse(
           'Database schema not configured',
           400
         );
       }
+
 
       let customerSchema;
 
@@ -755,23 +1252,56 @@ export default {
       }
 
 
-      /*
-       * ==============================
-       * User question
-       * ==============================
+      /* ---------------------------------------------------
+       * COMPACT SCHEMA
+       * ---------------------------------------------------
+       *
+       * Full D1 schema remains unchanged.
+       *
+       * Only this compact representation goes
+       * to Groq.
        */
 
-      const body = await request
-        .json()
-        .catch(() => ({}));
+      const compactCustomerSchema =
+        compactSchema(
+          customerSchema
+        );
 
-      const question = body.question;
+
+      if (
+        !compactCustomerSchema.trim()
+      ) {
+
+        return errorResponse(
+          'Database schema is empty',
+          500
+        );
+      }
+
+
+      /* ---------------------------------------------------
+       * User Question
+       * --------------------------------------------------- */
+
+      const body =
+        await request
+          .json()
+          .catch(
+            () => ({})
+          );
+
+
+      const question =
+        body.question;
+
 
       if (
         !question ||
-        typeof question !== 'string' ||
+        typeof question !==
+        'string' ||
         !question.trim()
       ) {
+
         return errorResponse(
           'Missing question',
           400
@@ -779,118 +1309,216 @@ export default {
       }
 
 
-      /*
-       * ==============================
-       * Groq
-       * ==============================
-       */
+      /* ---------------------------------------------------
+       * GROQ
+       * --------------------------------------------------- */
 
       try {
 
-        const groqRes = await fetch(
-          'https://api.groq.com/openai/v1/chat/completions',
-          {
-            method: 'POST',
+        /*
+         * callGroq:
+         *
+         * attempt 1
+         *
+         * if 429:
+         * wait 1 second
+         *
+         * attempt 2
+         *
+         * STOP.
+         */
 
-            headers: {
-              'Authorization':
-                `Bearer ${env.GROQ_API_KEY}`,
+        const groqRes =
+          await callGroq(
+            env,
+            compactCustomerSchema,
+            question
+          );
 
-              'Content-Type':
-                'application/json'
+
+        /*
+         * Read response once.
+         */
+
+        const groqRaw =
+          await groqRes.text();
+
+
+        /* -------------------------------------------------
+         * Groq still rate limited after retry
+         * ------------------------------------------------- */
+
+        if (
+          groqRes.status === 429
+        ) {
+
+          /*
+           * Internal diagnostic only.
+           * Do NOT expose Groq organization,
+           * token limits, etc. to customer.
+           */
+
+          console.error(
+            'Groq rate limit remained after retry',
+            {
+              status:
+                groqRes.status
+            }
+          );
+
+
+          return respondJSON(
+            {
+              success: false,
+
+              error:
+                'AI service is temporarily busy. Please try again shortly.'
             },
+            503
+          );
+        }
 
-            body: JSON.stringify({
 
-              model:
-                'openai/gpt-oss-20b',
-
-              temperature: 0.1,
-
-              messages: [
-
-                {
-                  role: 'system',
-
-                  content:
-                    `You generate read-only MySQL queries.
-
-Use ONLY the database schema provided below.
-
-Never invent tables or columns.
-
-Generate exactly one read-only SELECT or WITH query.
-
-Never generate INSERT, UPDATE, DELETE, DROP, ALTER, CREATE, TRUNCATE, REPLACE, GRANT or REVOKE.
-
-Return SQL only.
-
-No markdown.
-No explanation.
-
-DATABASE SCHEMA:
-${JSON.stringify(customerSchema)}`
-                },
-
-                {
-                  role: 'user',
-                  content: question.trim()
-                }
-
-              ]
-            })
-          }
-        );
-
+        /* -------------------------------------------------
+         * Other Groq HTTP Error
+         * ------------------------------------------------- */
 
         if (!groqRes.ok) {
 
-          return errorResponse(
-            'AI Generation Failed to respond properly.',
+          /*
+           * We log only safe metadata.
+           *
+           * Do not return raw Groq response
+           * to customer.
+           */
+
+          console.error(
+            'Groq API request failed',
+            {
+              status:
+                groqRes.status
+            }
+          );
+
+
+          return respondJSON(
+            {
+              success: false,
+
+              error:
+                'AI service is temporarily unavailable. Please try again.'
+            },
             502
           );
         }
 
 
-        const groqData =
-          await groqRes.json();
+        /* -------------------------------------------------
+         * Parse Groq JSON
+         * ------------------------------------------------- */
 
+        let groqData;
+
+        try {
+
+          groqData =
+            JSON.parse(
+              groqRaw
+            );
+
+        } catch (e) {
+
+          console.error(
+            'Groq returned invalid JSON'
+          );
+
+
+          return respondJSON(
+            {
+              success: false,
+
+              error:
+                'AI service returned an invalid response. Please try again.'
+            },
+            502
+          );
+        }
+
+
+        /* -------------------------------------------------
+         * Extract SQL
+         * ------------------------------------------------- */
 
         const sql =
           groqData
-            .choices?.[0]
+            ?.choices?.[0]
             ?.message
-            ?.content || '';
+            ?.content
+            ?.trim() || '';
+
+
+        const finishReason =
+          groqData
+            ?.choices?.[0]
+            ?.finish_reason ||
+          null;
 
 
         const usage =
-          groqData.usage || {
+          groqData?.usage || {
             prompt_tokens: 0,
             completion_tokens: 0,
             total_tokens: 0
           };
 
 
+        /* -------------------------------------------------
+         * No SQL generated
+         * ------------------------------------------------- */
+
         if (!sql) {
 
-          return errorResponse(
-            'No SQL generated.',
-            500
+          console.error(
+            'Groq returned no SQL',
+            {
+              finish_reason:
+                finishReason,
+
+              choices_count:
+                Array.isArray(
+                  groqData?.choices
+                )
+                  ? groqData
+                    .choices
+                    .length
+                  : 0
+            }
+          );
+
+
+          return respondJSON(
+            {
+              success: false,
+
+              error:
+                'AI could not generate a database query for that request.'
+            },
+            422
           );
         }
 
 
-        /*
-         * ==============================
-         * SQL safety validation
-         * ==============================
-         */
+        /* -------------------------------------------------
+         * SQL Safety Validation
+         * ------------------------------------------------- */
 
         const validation =
           validateSql(sql);
 
 
-        if (!validation.isValid) {
+        if (
+          !validation.isValid
+        ) {
 
           await env.DB
             .prepare(`
@@ -901,7 +1529,12 @@ ${JSON.stringify(customerSchema)}`
                 request_time,
                 status
               )
-              VALUES (?, ?, ?, "error_unsafe")
+              VALUES (
+                ?,
+                ?,
+                ?,
+                "error_unsafe"
+              )
             `)
             .bind(
               customer.id,
@@ -919,11 +1552,9 @@ ${JSON.stringify(customerSchema)}`
         }
 
 
-        /*
-         * ==============================
-         * Successful request log
-         * ==============================
-         */
+        /* -------------------------------------------------
+         * Successful Request Log
+         * ------------------------------------------------- */
 
         await env.DB
           .prepare(`
@@ -937,55 +1568,98 @@ ${JSON.stringify(customerSchema)}`
               total_tokens,
               status
             )
-            VALUES (?, ?, ?, ?, ?, ?, "success")
+            VALUES (
+              ?,
+              ?,
+              ?,
+              ?,
+              ?,
+              ?,
+              "success"
+            )
           `)
           .bind(
             customer.id,
+
             getKarachiDateStr(),
+
             getKarachiTimeStr(),
+
             usage.prompt_tokens || 0,
+
             usage.completion_tokens || 0,
+
             usage.total_tokens || 0
           )
           .run();
 
 
-        /*
-         * Worker ONLY returns SQL.
+        /* -------------------------------------------------
+         * SUCCESS
          *
-         * Laravel will execute it locally
-         * using a read-only MySQL account.
-         */
+         * Worker returns SQL ONLY.
+         *
+         * Laravel executes locally through
+         * ai_readonly.
+         * ------------------------------------------------- */
 
         return respondJSON({
           success: true,
-          sql: validation.cleanSql
+          sql:
+            validation.cleanSql
         });
+
 
       } catch (e) {
 
-        return errorResponse(
-          'AI Generation Failed',
+        /*
+         * Network / runtime / unexpected error.
+         *
+         * Internal error detail is intentionally
+         * NOT returned to customer.
+         */
+
+        console.error(
+          'AI generation exception',
+          {
+            message:
+              e instanceof Error
+                ? e.message
+                : 'Unknown error'
+          }
+        );
+
+
+        return respondJSON(
+          {
+            success: false,
+
+            error:
+              'AI service is temporarily unavailable. Please try again.'
+          },
           500
         );
       }
     }
 
 
-    /*
-     * =========================================================
+    /* =====================================================
      * ADMIN LOGIN
-     * =========================================================
-     */
+     * ===================================================== */
 
     if (
-      pathname === '/api/admin/login' &&
+      pathname ===
+      '/api/admin/login' &&
       request.method === 'POST'
     ) {
 
-      const body = await request
-        .json()
-        .catch(() => ({}));
+      const body =
+        await request
+          .json()
+          .catch(
+            () => ({})
+          );
+
 
       if (
         body.username ===
@@ -998,18 +1672,23 @@ ${JSON.stringify(customerSchema)}`
           await signJWT(
             {
               role: 'admin',
+
               exp:
                 Math.floor(
                   Date.now() / 1000
-                ) + 86400
+                ) +
+                86400
             },
+
             env.JWT_SECRET
           );
+
 
         return respondJSON({
           token
         });
       }
+
 
       return errorResponse(
         'Invalid credentials',
@@ -1018,14 +1697,13 @@ ${JSON.stringify(customerSchema)}`
     }
 
 
-    /*
-     * =========================================================
+    /* =====================================================
      * ADMIN LOGOUT
-     * =========================================================
-     */
+     * ===================================================== */
 
     if (
-      pathname === '/api/admin/logout' &&
+      pathname ===
+      '/api/admin/logout' &&
       request.method === 'POST'
     ) {
 
@@ -1035,20 +1713,22 @@ ${JSON.stringify(customerSchema)}`
     }
 
 
-    /*
-     * =========================================================
+    /* =====================================================
      * PROTECTED ADMIN ROUTES
-     * =========================================================
-     */
+     * ===================================================== */
 
     if (
-      pathname.startsWith('/api/admin/')
+      pathname.startsWith(
+        '/api/admin/'
+      )
     ) {
 
       const token =
         (
           request.headers
-            .get('Authorization') || ''
+            .get(
+              'Authorization'
+            ) || ''
         )
           .split(' ')[1];
 
@@ -1083,11 +1763,9 @@ ${JSON.stringify(customerSchema)}`
       }
 
 
-      /*
-       * ==============================
-       * Dashboard
-       * ==============================
-       */
+      /* ===================================================
+       * ADMIN DASHBOARD
+       * =================================================== */
 
       if (
         pathname ===
@@ -1098,7 +1776,8 @@ ${JSON.stringify(customerSchema)}`
         const totalCust =
           await env.DB
             .prepare(`
-              SELECT COUNT(*) as count
+              SELECT
+                COUNT(*) as count
               FROM customers
             `)
             .first();
@@ -1107,7 +1786,8 @@ ${JSON.stringify(customerSchema)}`
         const activeCust =
           await env.DB
             .prepare(`
-              SELECT COUNT(*) as count
+              SELECT
+                COUNT(*) as count
               FROM customers
               WHERE status="active"
             `)
@@ -1117,7 +1797,8 @@ ${JSON.stringify(customerSchema)}`
         const blockCust =
           await env.DB
             .prepare(`
-              SELECT COUNT(*) as count
+              SELECT
+                COUNT(*) as count
               FROM customers
               WHERE status="blocked"
             `)
@@ -1131,12 +1812,17 @@ ${JSON.stringify(customerSchema)}`
         const reqToday =
           await env.DB
             .prepare(`
-              SELECT COUNT(*) as count
+              SELECT
+                COUNT(*) as count
+
               FROM request_logs
+
               WHERE request_date=?
                 AND status="success"
             `)
-            .bind(dateToday)
+            .bind(
+              dateToday
+            )
             .first();
 
 
@@ -1152,11 +1838,15 @@ ${JSON.stringify(customerSchema)}`
                 SUM(input_tokens) as in_tok,
                 SUM(output_tokens) as out_tok,
                 SUM(total_tokens) as tot_tok
+
               FROM request_logs
+
               WHERE request_date >= ?
                 AND status="success"
             `)
-            .bind(startOfMonth)
+            .bind(
+              startOfMonth
+            )
             .first();
 
 
@@ -1166,10 +1856,16 @@ ${JSON.stringify(customerSchema)}`
               SELECT
                 request_date,
                 COUNT(*) as count
+
               FROM request_logs
+
               WHERE status="success"
+
               GROUP BY request_date
-              ORDER BY request_date DESC
+
+              ORDER BY
+                request_date DESC
+
               LIMIT 7
             `)
             .all();
@@ -1202,22 +1898,28 @@ ${JSON.stringify(customerSchema)}`
             monthStats?.tot_tok || 0,
 
           recentUsage:
-            (recent.results || [])
-              .map(r => ({
-                date: r.request_date,
-                requests: r.count
-              }))
+            (
+              recent.results ||
+              []
+            )
+              .map(
+                r => ({
+                  date:
+                    r.request_date,
+
+                  requests:
+                    r.count
+                })
+              )
               .reverse()
 
         });
       }
 
 
-      /*
-       * ==============================
-       * Customer List
-       * ==============================
-       */
+      /* ===================================================
+       * CUSTOMER LIST
+       * =================================================== */
 
       if (
         pathname ===
@@ -1286,8 +1988,10 @@ ${JSON.stringify(customerSchema)}`
           FROM customers c
 
           LEFT JOIN request_logs r
-            ON c.id = r.customer_id
-            AND r.status = 'success'
+            ON c.id =
+              r.customer_id
+            AND r.status =
+              'success'
 
           GROUP BY c.id
 
@@ -1312,11 +2016,9 @@ ${JSON.stringify(customerSchema)}`
       }
 
 
-      /*
-       * ==============================
-       * Create Customer
-       * ==============================
-       */
+      /* ===================================================
+       * CREATE CUSTOMER
+       * =================================================== */
 
       if (
         pathname ===
@@ -1327,7 +2029,9 @@ ${JSON.stringify(customerSchema)}`
         const body =
           await request
             .json()
-            .catch(() => ({}));
+            .catch(
+              () => ({})
+            );
 
 
         const name =
@@ -1339,7 +2043,8 @@ ${JSON.stringify(customerSchema)}`
 
         if (
           !name ||
-          typeof name !== 'string' ||
+          typeof name !==
+          'string' ||
           name.trim() === ''
         ) {
 
@@ -1369,10 +2074,10 @@ ${JSON.stringify(customerSchema)}`
 
 
         /*
-         * Existing behavior intentionally preserved.
-         * rawKey is currently stored directly in
-         * api_key_hash.
+         * Existing raw-key storage behavior
+         * intentionally preserved.
          */
+
         await env.DB
           .prepare(`
             INSERT INTO customers
@@ -1382,7 +2087,12 @@ ${JSON.stringify(customerSchema)}`
               monthly_limit,
               status
             )
-            VALUES (?, ?, ?, "active")
+            VALUES (
+              ?,
+              ?,
+              ?,
+              "active"
+            )
           `)
           .bind(
             name.trim(),
@@ -1394,16 +2104,15 @@ ${JSON.stringify(customerSchema)}`
 
         return respondJSON({
           success: true,
-          api_key: rawKey
+          api_key:
+            rawKey
         });
       }
 
 
-      /*
-       * ==============================
-       * Customer Detail / Update
-       * ==============================
-       */
+      /* ===================================================
+       * CUSTOMER DETAIL / UPDATE
+       * =================================================== */
 
       const custMatch =
         pathname.match(
@@ -1427,7 +2136,9 @@ ${JSON.stringify(customerSchema)}`
                 monthly_limit,
                 api_key_hash as api_key,
                 created_at
+
               FROM customers
+
               WHERE id=?
             `)
             .bind(id)
@@ -1443,9 +2154,9 @@ ${JSON.stringify(customerSchema)}`
         }
 
 
-        /*
+        /* -----------------------------------------------
          * Customer Detail
-         */
+         * ----------------------------------------------- */
 
         if (
           request.method === 'GET'
@@ -1458,8 +2169,11 @@ ${JSON.stringify(customerSchema)}`
           const reqToday =
             await env.DB
               .prepare(`
-                SELECT COUNT(*) as count
+                SELECT
+                  COUNT(*) as count
+
                 FROM request_logs
+
                 WHERE customer_id=?
                   AND request_date=?
                   AND status="success"
@@ -1481,7 +2195,9 @@ ${JSON.stringify(customerSchema)}`
                 SELECT
                   COUNT(*) as count,
                   SUM(total_tokens) as tok
+
                 FROM request_logs
+
                 WHERE customer_id=?
                   AND request_date >= ?
                   AND status="success"
@@ -1498,11 +2214,15 @@ ${JSON.stringify(customerSchema)}`
               .prepare(`
                 SELECT
                   request_date as date,
+
                   COUNT(*) as requests,
+
                   SUM(input_tokens)
                     as input_tokens,
+
                   SUM(output_tokens)
                     as output_tokens,
+
                   SUM(total_tokens)
                     as total_tokens
 
@@ -1542,9 +2262,9 @@ ${JSON.stringify(customerSchema)}`
         }
 
 
-        /*
+        /* -----------------------------------------------
          * Update Customer
-         */
+         * ----------------------------------------------- */
 
         if (
           request.method === 'PATCH'
@@ -1553,16 +2273,21 @@ ${JSON.stringify(customerSchema)}`
           const body =
             await request
               .json()
-              .catch(() => ({}));
+              .catch(
+                () => ({})
+              );
 
 
           if (
-            body.status !== undefined
+            body.status !==
+            undefined
           ) {
 
             if (
-              body.status !== 'active' &&
-              body.status !== 'blocked'
+              body.status !==
+              'active' &&
+              body.status !==
+              'blocked'
             ) {
 
               return errorResponse(
@@ -1575,7 +2300,9 @@ ${JSON.stringify(customerSchema)}`
             await env.DB
               .prepare(`
                 UPDATE customers
+
                 SET status=?
+
                 WHERE id=?
               `)
               .bind(
@@ -1608,7 +2335,9 @@ ${JSON.stringify(customerSchema)}`
             await env.DB
               .prepare(`
                 UPDATE customers
+
                 SET monthly_limit=?
+
                 WHERE id=?
               `)
               .bind(
@@ -1626,11 +2355,9 @@ ${JSON.stringify(customerSchema)}`
       }
 
 
-      /*
-       * ==============================
-       * Rotate Customer Key
-       * ==============================
-       */
+      /* ===================================================
+       * ROTATE CUSTOMER KEY
+       * =================================================== */
 
       const rotateMatch =
         pathname.match(
@@ -1674,7 +2401,9 @@ ${JSON.stringify(customerSchema)}`
         await env.DB
           .prepare(`
             UPDATE customers
+
             SET api_key_hash=?
+
             WHERE id=?
           `)
           .bind(
@@ -1686,16 +2415,15 @@ ${JSON.stringify(customerSchema)}`
 
         return respondJSON({
           success: true,
-          api_key: rawKey
+          api_key:
+            rawKey
         });
       }
 
 
-      /*
-       * ==============================
-       * Usage
-       * ==============================
-       */
+      /* ===================================================
+       * USAGE
+       * =================================================== */
 
       if (
         pathname ===
@@ -1710,11 +2438,14 @@ ${JSON.stringify(customerSchema)}`
 
 
         let p =
-          urlParams.get('period') ||
-          '30';
+          urlParams.get(
+            'period'
+          ) || '30';
 
 
-        if (!isValidPeriod(p)) {
+        if (
+          !isValidPeriod(p)
+        ) {
 
           return errorResponse(
             'Invalid period',
@@ -1727,7 +2458,9 @@ ${JSON.stringify(customerSchema)}`
           getKarachiDateStr();
 
 
-        if (p !== 'today') {
+        if (
+          p !== 'today'
+        ) {
 
           const dateOffset =
             (
@@ -1805,10 +2538,14 @@ ${JSON.stringify(customerSchema)}`
         `;
 
 
-        let b = [since];
+        let b = [
+          since
+        ];
 
 
-        if (cid !== 'all') {
+        if (
+          cid !== 'all'
+        ) {
 
           q = `
             SELECT
@@ -1883,17 +2620,16 @@ ${JSON.stringify(customerSchema)}`
     }
 
 
-    /*
-     * =========================================================
+    /* =====================================================
      * FALLBACK
-     * =========================================================
-     */
+     * ===================================================== */
 
     return new Response(
       'Not Found',
       {
         status: 404,
-        headers: corsHeaders
+        headers:
+          corsHeaders
       }
     );
   }

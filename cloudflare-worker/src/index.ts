@@ -325,6 +325,30 @@ Return SQL only. No markdown. No explanation. Never generate INSERT, UPDATE, DEL
         return respondJSON({ success: true, api_key: rawKey });
       }
 
+      const requestsMatch = pathname.match(/^\/api\/admin\/customers\/(\d+)\/requests$/);
+      if (requestsMatch && request.method === 'GET') {
+        const id = requestsMatch[1];
+        const cust = await env.DB.prepare('SELECT id FROM customers WHERE id=?').bind(id).first();
+        if (!cust) return errorResponse('Not found', 404);
+
+        const urlParams = new URLSearchParams(url.search);
+        const page = parseInt(urlParams.get('page') || '1');
+        const limit = 20;
+        const offset = (page - 1) * limit;
+
+        const totalResult = await env.DB.prepare('SELECT COUNT(*) as count FROM request_logs WHERE customer_id=?').bind(id).first();
+        const total = (totalResult as any)?.count || 0;
+
+        const requests = await env.DB.prepare('SELECT id, request_date, request_time, input_tokens, output_tokens, total_tokens, status FROM request_logs WHERE customer_id=? ORDER BY id DESC LIMIT ? OFFSET ?').bind(id, limit, offset).all();
+
+        return respondJSON({
+          requests: requests.results,
+          total,
+          page,
+          totalPages: Math.ceil(total / limit)
+        });
+      }
+
       if (pathname === '/api/admin/usage' && request.method === 'GET') {
         const urlParams = new URLSearchParams(url.search);
         let p = urlParams.get('period') || '30';

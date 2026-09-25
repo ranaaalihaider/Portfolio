@@ -12,6 +12,15 @@ interface Usage {
   output_tokens: number;
   total_tokens: number;
 }
+interface RequestLog {
+  id: number;
+  request_date: string;
+  request_time: string;
+  input_tokens: number;
+  output_tokens: number;
+  total_tokens: number;
+  status: string;
+}
 interface Customer {
   id: number;
   name: string;
@@ -34,10 +43,34 @@ export default function CustomerDetail({ params }: { params: Promise<{ id: strin
   const [showKey, setShowKey] = useState(false);
   
   const [newKey, setNewKey] = useState('');
+  
+  const [requests, setRequests] = useState<RequestLog[]>([]);
+  const [requestsPage, setRequestsPage] = useState(1);
+  const [requestsTotalPages, setRequestsTotalPages] = useState(1);
+  const [loadingRequests, setLoadingRequests] = useState(false);
 
   useEffect(() => {
     loadCustomer();
   }, [unwrappedParams.id]);
+
+  useEffect(() => {
+    if (unwrappedParams.id) {
+      loadRequests(requestsPage);
+    }
+  }, [unwrappedParams.id, requestsPage]);
+
+  const loadRequests = async (pageNum: number) => {
+    try {
+      setLoadingRequests(true);
+      const data = await fetchApi(`/api/admin/customers/${unwrappedParams.id}/requests?page=${pageNum}`);
+      setRequests(data.requests || []);
+      setRequestsTotalPages(data.totalPages || 1);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoadingRequests(false);
+    }
+  };
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
@@ -188,33 +221,60 @@ export default function CustomerDetail({ params }: { params: Promise<{ id: strin
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-        <div className="p-6 border-b border-gray-100">
-          <h2 className="text-lg font-bold text-gray-900">Recent Usage</h2>
+        <div className="p-6 border-b border-gray-100 flex justify-between items-center">
+          <h2 className="text-lg font-bold text-gray-900">Request Logs</h2>
+          <div className="flex items-center gap-2">
+            <button 
+              onClick={() => setRequestsPage(p => Math.max(1, p - 1))}
+              disabled={requestsPage === 1 || loadingRequests}
+              className="px-3 py-1 bg-gray-50 border border-gray-200 text-gray-700 rounded-md hover:bg-gray-100 disabled:opacity-50 transition-colors"
+            >
+              Previous
+            </button>
+            <span className="text-sm text-gray-500">Page {requestsPage} of {requestsTotalPages || 1}</span>
+            <button 
+              onClick={() => setRequestsPage(p => Math.min(requestsTotalPages, p + 1))}
+              disabled={requestsPage === requestsTotalPages || loadingRequests}
+              className="px-3 py-1 bg-gray-50 border border-gray-200 text-gray-700 rounded-md hover:bg-gray-100 disabled:opacity-50 transition-colors"
+            >
+              Next
+            </button>
+          </div>
         </div>
         <table className="w-full text-left">
           <thead className="bg-gray-50">
             <tr>
-              <th className="p-4 text-sm font-semibold text-gray-600">Date</th>
-              <th className="p-4 text-sm font-semibold text-gray-600">Requests</th>
+              <th className="p-4 text-sm font-semibold text-gray-600">Date/Time</th>
+              <th className="p-4 text-sm font-semibold text-gray-600">Status</th>
               <th className="p-4 text-sm font-semibold text-gray-600">Input Tokens</th>
               <th className="p-4 text-sm font-semibold text-gray-600">Output Tokens</th>
               <th className="p-4 text-sm font-semibold text-gray-600">Total Tokens</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
-            {customer.daily_usage && customer.daily_usage.length > 0 ? (
-              customer.daily_usage.map((usage: Usage, idx: number) => (
-                <tr key={idx} className="hover:bg-gray-50">
-                  <td className="p-4 text-gray-900">{usage.date}</td>
-                  <td className="p-4 text-gray-600">{usage.requests}</td>
-                  <td className="p-4 text-gray-600">{usage.input_tokens.toLocaleString()}</td>
-                  <td className="p-4 text-gray-600">{usage.output_tokens.toLocaleString()}</td>
-                  <td className="p-4 text-gray-900 font-medium">{usage.total_tokens.toLocaleString()}</td>
+            {loadingRequests ? (
+              <tr>
+                <td colSpan={5} className="p-8 text-center text-gray-500 animate-pulse">Loading requests...</td>
+              </tr>
+            ) : requests && requests.length > 0 ? (
+              requests.map((req: RequestLog) => (
+                <tr key={req.id} className="hover:bg-gray-50">
+                  <td className="p-4 text-gray-900">
+                    {req.request_date} {req.request_time}
+                  </td>
+                  <td className="p-4 text-gray-600">
+                    <span className={`px-2 py-1 text-xs rounded-full font-medium ${req.status === 'success' ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'}`}>
+                      {req.status}
+                    </span>
+                  </td>
+                  <td className="p-4 text-gray-600">{req.input_tokens?.toLocaleString() || 0}</td>
+                  <td className="p-4 text-gray-600">{req.output_tokens?.toLocaleString() || 0}</td>
+                  <td className="p-4 text-gray-900 font-medium">{req.total_tokens?.toLocaleString() || 0}</td>
                 </tr>
               ))
             ) : (
               <tr>
-                <td colSpan={5} className="p-8 text-center text-gray-500">No usage recorded yet.</td>
+                <td colSpan={5} className="p-8 text-center text-gray-500">No requests found.</td>
               </tr>
             )}
           </tbody>
