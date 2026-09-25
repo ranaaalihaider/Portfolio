@@ -6,8 +6,10 @@
  *
  * Important:
  * - Worker NEVER executes customer SQL.
- * - Full customer schema remains stored in D1.
- * - Only a compact schema is sent to Groq.
+ * - Full customer schema + business definitions remain stored in D1.
+ * - Only compact schema + compact semantic definitions are sent to Groq.
+ * - VERIFIED business definitions override model assumptions.
+ * - AMBIGUOUS metrics must never be guessed.
  * - Groq 429 gets exactly ONE retry after 1 second.
  * - Internal Groq errors are NOT exposed to customers.
  */
@@ -93,11 +95,7 @@ async function verifyJWT(token, secret) {
       return null;
     }
 
-    const [
-      header,
-      payload,
-      signature
-    ] = parts;
+    const [header, payload, signature] = parts;
 
     const key =
       await crypto.subtle.importKey(
@@ -115,9 +113,7 @@ async function verifyJWT(token, secret) {
       new Uint8Array(
         base64UrlDecode(signature)
           .split('')
-          .map(
-            c => c.charCodeAt(0)
-          )
+          .map(c => c.charCodeAt(0))
       );
 
     const isValid =
@@ -148,13 +144,6 @@ async function verifyJWT(token, secret) {
  * HASH HELPERS
  * ========================================================= */
 
-/*
- * Kept for future API-key hashing migration.
- *
- * Current customer authentication behavior is intentionally
- * preserved because existing keys are currently stored
- * directly in api_key_hash.
- */
 async function hashApiKey(key) {
   const hashBuffer =
     await crypto.subtle.digest(
@@ -172,10 +161,6 @@ async function hashApiKey(key) {
     .join('');
 }
 
-
-/*
- * Used for uploaded schema hashes.
- */
 async function sha256Hex(str) {
   const hashBuffer =
     await crypto.subtle.digest(
@@ -199,8 +184,7 @@ async function sha256Hex(str) {
  * ========================================================= */
 
 function generateRandomKey() {
-  const array =
-    new Uint8Array(32);
+  const array = new Uint8Array(32);
 
   crypto.getRandomValues(array);
 
@@ -265,9 +249,7 @@ function getKarachiStartOfMonth() {
     );
 
   const parts =
-    formatter.formatToParts(
-      new Date()
-    );
+    formatter.formatToParts(new Date());
 
   let y = '';
   let m = '';
@@ -295,8 +277,7 @@ function isValidPeriod(p) {
 
 
 /* =========================================================
- * SLEEP HELPER
- * Used ONLY for one Groq 429 retry.
+ * SLEEP
  * ========================================================= */
 
 function sleep(ms) {
@@ -307,115 +288,572 @@ function sleep(ms) {
 
 
 /* =========================================================
- * COMPACT DATABASE SCHEMA
- * =========================================================
- *
- * Full schema stays stored in D1.
- *
- * Example full schema:
- *
- * {
- *   tables: {
- *     customers: {
- *       columns: [
- *         { name: "id", type: "bigint" },
- *         { name: "name", type: "varchar" },
- *         { name: "balance", type: "decimal" }
- *       ]
- *     }
- *   },
- *   relationships: [...]
- * }
- *
- * Becomes:
- *
- * customers(id,name,balance)
- *
- * RELATIONSHIPS:
- * sales.customer_id->customers.id
- *
- * This significantly reduces tokens sent to Groq.
+ * COMPACT RICH DATABASE SCHEMA + BUSINESS SEMANTICS
  * ========================================================= */
 
 function compactSchema(schema) {
   const lines = [];
 
+  /*
+   * =======================================================
+   * DATABASE TABLES / COLUMNS
+   * =======================================================
+   */
+
   if (
     schema &&
     schema.tables &&
-    typeof schema.tables === 'object'
+    typeof schema.tables === 'object' &&
+    !Array.isArray(schema.tables)
   ) {
+    lines.push('DATABASE SCHEMA:');
 
-    for (
-      const [
-        tableName,
-        tableData
-      ]
-      of Object.entries(schema.tables)
-    ) {
-
+    for (const [tableName, tableData] of Object.entries(schema.tables)) {
       const columns =
-        Array.isArray(
-          tableData?.columns
-        )
+        Array.isArray(tableData?.columns)
           ? tableData.columns
-            .map(
-              column =>
-                typeof column === 'string'
-                  ? column
-                  : column?.name
-            )
+            .map(column => {
+              if (typeof column === 'string') {
+                return column;
+              }
+
+              if (!column?.name) {
+                return null;
+              }
+
+              const type =
+                column.column_type ||
+                column.type ||
+                '';
+
+              const flags = [];
+
+              if (
+                column.key === 'PRI' ||
+                (
+                  Array.isArray(tableData?.primary_keys) &&
+                  tableData.primary_keys.includes(column.name)
+                )
+              ) {
+                flags.push('PK');
+              }
+
+              return [
+                column.name,
+                type,
+                ...flags
+              ]
+                .filter(Boolean)
+                .join(':');
+            })
             .filter(Boolean)
           : [];
 
-      /*
-       * Keep the table even if columns happen
-       * to be empty.
-       */
+      const tableType =
+        tableData?.table_type === 'VIEW'
+          ? ':VIEW'
+          : '';
+
       lines.push(
-        `${tableName}(${columns.join(',')})`
+        `${tableName}${tableType}(${columns.join(',')})`
       );
+
+      /*
+       * UNIQUE KEYS
+       */
+
+      if (
+        Array.isArray(tableData?.unique_keys) &&
+        tableData.unique_keys.length > 0
+      ) {
+        const uniqueGroups =
+          tableData.unique_keys
+            .filter(
+              group =>
+                Array.isArray(group) &&
+                group.length > 0
+            )
+            .map(group => group.join('+'));
+
+        if (uniqueGroups.length > 0) {
+          lines.push(
+            `UNIQUE ${tableName}: ${uniqueGroups.join(';')}`
+          );
+        }
+      }
     }
   }
 
 
   /*
-   * Preserve foreign-key / relationship
-   * information because it is important
-   * for JOIN generation.
+   * =======================================================
+   * FOREIGN KEYS
+   * =======================================================
    */
+
   if (
-    Array.isArray(
-      schema?.relationships
-    ) &&
+    Array.isArray(schema?.relationships) &&
     schema.relationships.length > 0
   ) {
-
     lines.push('');
-    lines.push('RELATIONSHIPS:');
+    lines.push('FOREIGN KEYS:');
 
-    for (
-      const rel
-      of schema.relationships
-    ) {
-
+    for (const rel of schema.relationships) {
       if (
         rel?.from_table &&
         rel?.from_column &&
         rel?.to_table &&
         rel?.to_column
       ) {
-
         lines.push(
-          `${rel.from_table}.` +
-          `${rel.from_column}` +
+          `${rel.from_table}.${rel.from_column}` +
           '->' +
-          `${rel.to_table}.` +
-          `${rel.to_column}`
+          `${rel.to_table}.${rel.to_column}`
         );
       }
     }
   }
+
+
+  /*
+   * =======================================================
+   * BUSINESS DEFINITIONS
+   * =======================================================
+   */
+
+  const businessDefinitions =
+    schema?.business_definitions;
+
+  if (
+    businessDefinitions &&
+    typeof businessDefinitions === 'object' &&
+    !Array.isArray(businessDefinitions)
+  ) {
+
+    /*
+     * =====================================================
+     * VERIFIED / AMBIGUOUS METRICS
+     * =====================================================
+     */
+
+    const metrics =
+      businessDefinitions.metrics;
+
+    if (
+      metrics &&
+      typeof metrics === 'object' &&
+      !Array.isArray(metrics)
+    ) {
+      const verifiedMetrics = [];
+      const ambiguousMetrics = [];
+
+      for (
+        const [metricName, metric]
+        of Object.entries(metrics)
+      ) {
+        if (
+          !metric ||
+          typeof metric !== 'object'
+        ) {
+          continue;
+        }
+
+        const status =
+          String(metric.status || '')
+            .toUpperCase();
+
+
+        /*
+         * VERIFIED / DERIVED
+         */
+
+        if (
+          status === 'VERIFIED' ||
+          status === 'DERIVED'
+        ) {
+          const parts = [
+            metricName,
+            `status=${status}`
+          ];
+
+          if (metric.formula) {
+            parts.push(
+              `formula=${metric.formula}`
+            );
+          }
+
+          if (metric.date_field) {
+            parts.push(
+              `date=${metric.date_field}`
+            );
+          }
+
+          if (
+            Array.isArray(metric.filters) &&
+            metric.filters.length > 0
+          ) {
+            parts.push(
+              `filters=${metric.filters.join(' AND ')}`
+            );
+          }
+
+          if (
+            Array.isArray(metric.tables) &&
+            metric.tables.length > 0
+          ) {
+            parts.push(
+              `tables=${metric.tables.join(',')}`
+            );
+          }
+
+          /*
+           * NEW:
+           * Default dimension.
+           */
+
+          if (metric.default_dimension) {
+            parts.push(
+              `default_dimension=${metric.default_dimension}`
+            );
+          }
+
+          /*
+           * Keep meaning because it helps the model
+           * understand what the metric represents.
+           */
+
+          if (metric.meaning) {
+            parts.push(
+              `meaning=${metric.meaning}`
+            );
+          }
+
+          verifiedMetrics.push(
+            parts.join(' | ')
+          );
+
+
+          /*
+           * =================================================
+           * METRIC-SPECIFIC SUPPORTED DIMENSIONS
+           * =================================================
+           */
+
+          const supportedDimensions =
+            metric.supported_dimensions;
+
+          if (
+            supportedDimensions &&
+            typeof supportedDimensions === 'object' &&
+            !Array.isArray(supportedDimensions) &&
+            Object.keys(supportedDimensions).length > 0
+          ) {
+            for (
+              const [dimensionName, dimension]
+              of Object.entries(supportedDimensions)
+            ) {
+              if (
+                !dimension ||
+                typeof dimension !== 'object'
+              ) {
+                continue;
+              }
+
+              const dimensionParts = [
+                `metric=${metricName}`,
+                `dimension=${dimensionName}`
+              ];
+
+              if (dimension.table) {
+                dimensionParts.push(
+                  `table=${dimension.table}`
+                );
+              }
+
+              if (dimension.join) {
+                dimensionParts.push(
+                  `join=${dimension.join}`
+                );
+              } else {
+                dimensionParts.push(
+                  'join=NONE'
+                );
+              }
+
+              if (
+                Array.isArray(dimension.group_by) &&
+                dimension.group_by.length > 0
+              ) {
+                dimensionParts.push(
+                  `group_by=${dimension.group_by.join(',')}`
+                );
+              }
+
+              verifiedMetrics.push(
+                `DIMENSION ${dimensionParts.join(' | ')}`
+              );
+            }
+          }
+        }
+
+
+        /*
+         * AMBIGUOUS
+         */
+
+        else if (
+          status === 'AMBIGUOUS'
+        ) {
+          const parts = [
+            metricName,
+            'status=AMBIGUOUS',
+            'formula=NOT_VERIFIED'
+          ];
+
+          if (metric.meaning) {
+            parts.push(
+              `reason=${metric.meaning}`
+            );
+          }
+
+          ambiguousMetrics.push(
+            parts.join(' | ')
+          );
+        }
+      }
+
+
+      if (verifiedMetrics.length > 0) {
+        lines.push('');
+        lines.push(
+          'VERIFIED BUSINESS METRICS AND DIMENSIONS:'
+        );
+
+        for (const metricLine of verifiedMetrics) {
+          lines.push(metricLine);
+        }
+      }
+
+
+      if (ambiguousMetrics.length > 0) {
+        lines.push('');
+        lines.push(
+          'AMBIGUOUS BUSINESS METRICS:'
+        );
+
+        for (const metricLine of ambiguousMetrics) {
+          lines.push(metricLine);
+        }
+      }
+    }
+
+
+    /*
+     * =====================================================
+     * GLOBAL BUSINESS DIMENSIONS
+     * =====================================================
+     */
+
+    const dimensions =
+      businessDefinitions.dimensions;
+
+    if (
+      dimensions &&
+      typeof dimensions === 'object' &&
+      !Array.isArray(dimensions)
+    ) {
+      const dimensionLines = [];
+
+      for (
+        const [dimensionName, dimension]
+        of Object.entries(dimensions)
+      ) {
+        if (
+          !dimension ||
+          typeof dimension !== 'object'
+        ) {
+          continue;
+        }
+
+        const parts = [
+          dimensionName
+        ];
+
+        if (dimension.table) {
+          parts.push(
+            `table=${dimension.table}`
+          );
+        }
+
+        if (dimension.id_column) {
+          parts.push(
+            `id=${dimension.id_column}`
+          );
+        }
+
+        if (dimension.label_column) {
+          parts.push(
+            `label=${dimension.label_column}`
+          );
+        }
+
+        if (dimension.meaning) {
+          parts.push(
+            `meaning=${dimension.meaning}`
+          );
+        }
+
+        dimensionLines.push(
+          parts.join(' | ')
+        );
+      }
+
+
+      if (dimensionLines.length > 0) {
+        lines.push('');
+        lines.push(
+          'BUSINESS DIMENSIONS:'
+        );
+
+        for (
+          const dimensionLine
+          of dimensionLines
+        ) {
+          lines.push(dimensionLine);
+        }
+      }
+    }
+
+
+    /*
+     * =====================================================
+     * GENERIC DIMENSION REASONING RULES
+     * =====================================================
+     */
+
+    const dimensionRules =
+      businessDefinitions.dimension_rules;
+
+    if (
+      Array.isArray(dimensionRules) &&
+      dimensionRules.length > 0
+    ) {
+      lines.push('');
+      lines.push(
+        'METRIC DIMENSION RULES:'
+      );
+
+      for (const rule of dimensionRules) {
+        if (
+          typeof rule === 'string' &&
+          rule.trim()
+        ) {
+          lines.push(
+            `- ${rule.trim()}`
+          );
+        }
+      }
+    }
+
+
+    /*
+     * =====================================================
+     * COLUMN SEMANTICS
+     * =====================================================
+     */
+
+    const columnDefinitions =
+      businessDefinitions.columns;
+
+    if (
+      columnDefinitions &&
+      typeof columnDefinitions === 'object' &&
+      !Array.isArray(columnDefinitions)
+    ) {
+      const semanticLines = [];
+
+      for (
+        const [columnName, definition]
+        of Object.entries(columnDefinitions)
+      ) {
+        if (
+          !definition ||
+          typeof definition !== 'object'
+        ) {
+          continue;
+        }
+
+        const parts = [
+          columnName
+        ];
+
+        if (definition.meaning) {
+          parts.push(
+            definition.meaning
+          );
+        }
+
+        if (definition.warning) {
+          parts.push(
+            `WARNING: ${definition.warning}`
+          );
+        }
+
+        if (parts.length > 1) {
+          semanticLines.push(
+            parts.join(' = ')
+          );
+        }
+      }
+
+
+      if (semanticLines.length > 0) {
+        lines.push('');
+        lines.push(
+          'BUSINESS COLUMN SEMANTICS:'
+        );
+
+        for (
+          const semanticLine
+          of semanticLines
+        ) {
+          lines.push(semanticLine);
+        }
+      }
+    }
+
+
+    /*
+     * =====================================================
+     * GLOBAL BUSINESS RULES
+     * =====================================================
+     */
+
+    const businessRules =
+      businessDefinitions.rules;
+
+    if (
+      Array.isArray(businessRules) &&
+      businessRules.length > 0
+    ) {
+      lines.push('');
+      lines.push(
+        'GLOBAL BUSINESS RULES:'
+      );
+
+      for (const rule of businessRules) {
+        if (
+          typeof rule === 'string' &&
+          rule.trim()
+        ) {
+          lines.push(
+            `- ${rule.trim()}`
+          );
+        }
+      }
+    }
+  }
+
 
   return lines.join('\n');
 }
@@ -426,6 +864,7 @@ function compactSchema(schema) {
  * ========================================================= */
 
 function validateSql(sql) {
+
   let cleanSql =
     sql
       .replace(/```sql/ig, '')
@@ -446,6 +885,7 @@ function validateSql(sql) {
     };
   }
 
+
   if (
     cleanSql.includes('--') ||
     cleanSql.includes('/*')
@@ -456,6 +896,7 @@ function validateSql(sql) {
         'SQL comments are not allowed.'
     };
   }
+
 
   const segments =
     cleanSql.split(';');
@@ -474,6 +915,7 @@ function validateSql(sql) {
     };
   }
 
+
   const dangerousKeywords = [
     'INSERT',
     'UPDATE',
@@ -487,12 +929,15 @@ function validateSql(sql) {
     'REVOKE'
   ];
 
+
   const tokens =
     upperSql.split(
       /[\s,();]+/
     );
 
+
   for (const token of tokens) {
+
     if (
       dangerousKeywords.includes(
         token
@@ -506,6 +951,26 @@ function validateSql(sql) {
     }
   }
 
+
+  /*
+   * Extra CTE check.
+   *
+   * WITH is allowed only when the statement ultimately
+   * contains a SELECT.
+   */
+
+  if (
+    upperSql.startsWith('WITH') &&
+    !/\bSELECT\b/i.test(cleanSql)
+  ) {
+    return {
+      isValid: false,
+      error:
+        'WITH statement must contain a SELECT query.'
+    };
+  }
+
+
   return {
     isValid: true,
     cleanSql
@@ -515,15 +980,6 @@ function validateSql(sql) {
 
 /* =========================================================
  * GROQ REQUEST
- * =========================================================
- *
- * Makes ONE normal request.
- *
- * If Groq returns HTTP 429:
- * - wait ~1 second
- * - retry exactly ONCE
- *
- * No infinite retry.
  * ========================================================= */
 
 async function callGroq(
@@ -533,38 +989,258 @@ async function callGroq(
 ) {
 
   const requestBody = {
+
     model:
       'openai/gpt-oss-20b',
 
     temperature: 0.1,
 
     messages: [
+
       {
         role: 'system',
 
         content:
-          `You generate read-only MySQL queries.
+          `You generate accurate read-only MySQL queries from natural-language business questions.
 
-Use ONLY the database schema provided below.
+The user may write in English, Urdu, Roman Urdu, mixed language, and may use informal or imperfect spelling.
 
-Never invent tables or columns.
+You are given:
 
-Generate exactly one read-only SELECT or WITH query.
+1. DATABASE SCHEMA
+2. FOREIGN-KEY RELATIONSHIPS
+3. VERIFIED BUSINESS METRICS
+4. BUSINESS COLUMN SEMANTICS
+5. POSSIBLY AMBIGUOUS BUSINESS METRICS
 
-Never generate INSERT, UPDATE, DELETE, DROP, ALTER, CREATE, TRUNCATE, REPLACE, GRANT or REVOKE.
+These definitions come from the customer's actual application source code.
 
-Return SQL only.
+OUTPUT CONTRACT:
 
-No markdown.
-No explanation.
+You are a SQL generator, not a conversational assistant.
 
-DATABASE SCHEMA:
+Your response MUST start with SELECT or WITH.
+
+Return exactly ONE valid read-only MySQL SELECT or WITH query.
+
+Return ONLY SQL.
+
+Never return:
+- explanations
+- apologies
+- conversational answers
+- markdown
+- code fences
+- comments
+- "SQL:"
+- "I cannot"
+- "I don't know"
+- any text before or after the SQL
+
+IMPORTANT DATABASE LOOKUP RULE:
+
+You do NOT need to know the actual values stored in the customer's database.
+
+Your job is to generate SQL that retrieves the requested value from the customer's local database.
+
+For example, requests such as:
+
+"fasal rana ka number"
+"fasal rana ka phone number"
+"what is phone number of fasal rana"
+"ali ka balance"
+"ABC product ki price kia hai"
+"ABC ka stock kitna hai"
+
+are DATABASE LOOKUP requests.
+
+Generate a SELECT query using ONLY the actual tables and columns available in DATABASE SCHEMA.
+
+Common English / Urdu / Roman Urdu meanings:
+
+"ka number" = phone/contact/mobile number
+"phone number" = phone/contact/mobile number
+"mobile number" = phone/contact/mobile number
+"ka balance" = balance
+"kitna balance" = balance
+"price kia hai" = price
+"rate kia hai" = price/rate
+"stock kitna hai" = stock/quantity
+"quantity kitni hai" = stock/quantity
+"address kia hai" = address
+
+For customer, supplier, product, item, or person name searches, prefer case-insensitive partial matching where appropriate.
+
+For example:
+
+LOWER(name_column) LIKE LOWER('%search text%')
+
+The actual table and column names MUST come from DATABASE SCHEMA.
+
+Do NOT refuse a lookup merely because the actual phone number, balance, price, stock, address, or other requested value is not present in the schema.
+
+The schema describes WHERE the data is stored.
+
+The customer's local database contains the actual values.
+
+Your job is only to generate SQL that retrieves those values.
+
+STRICT PRIORITY:
+
+VERIFIED BUSINESS DEFINITIONS ARE THE SOURCE OF TRUTH.
+
+If a VERIFIED metric provides a formula, date field, tables, or filters, use those definitions instead of inventing another formula from column names.
+
+STRICT RULES:
+
+1. Never invent a table, column, relationship, stored value, business rule, or unsupported formula.
+
+2. When the user's question corresponds to a VERIFIED business metric, use its verified formula.
+
+3. Do NOT replace a verified formula with a mathematically similar formula.
+
+For example:
+
+If line_item_revenue is defined as:
+
+SUM(sales_items.total)
+
+you MUST NOT replace it with:
+
+SUM(sales_items.quantity * sales_items.price)
+
+unless the verified definition explicitly allows that.
+
+4. Column names such as:
+
+price
+total
+total_amount
+final_amount
+amount
+cost
+cost_price
+paid
+due
+balance
+
+do NOT automatically have interchangeable meanings.
+
+Use BUSINESS COLUMN SEMANTICS where provided.
+
+5. Pay special attention to warnings attached to columns.
+
+A WARNING is a hard business constraint.
+
+6. If a metric is marked AMBIGUOUS, do NOT invent or approximate its formula.
+
+If the user specifically requests an AMBIGUOUS metric and no verified alternative answers the question, do not fabricate a calculation.
+
+AMBIGUOUS BUSINESS METRICS apply to calculations whose business formula is not safely known.
+
+They do NOT prevent ordinary database lookups.
+
+Phone numbers, customer balances, supplier details, product details, stock, invoice details, names, addresses, and other directly stored database fields should be retrieved with a normal SELECT query when those fields exist in the supplied schema.
+
+7. Understand table granularity before using JOIN, SUM, COUNT, AVG, MIN, MAX or other aggregation.
+
+8. Be especially careful with one-to-many relationships.
+
+A parent row may appear multiple times after joining to child rows.
+
+9. Never SUM a parent-level monetary value after a one-to-many JOIN when doing so duplicates the parent value.
+
+10. When a calculation combines parent-level amounts with child-level amounts, aggregate child rows to the parent key first when necessary.
+
+11. Use the provided foreign-key relationships when determining joins.
+
+Do not infer a relationship merely because columns have similar names.
+
+12. For financial calculations including sales, revenue, profit, cost, purchases, stock, payments, balances, expenses and returns, respect the verified business definitions and natural row granularity.
+
+13. Never invent discount behavior, tax behavior, return behavior, profit formulas, revenue formulas, stock formulas, balance formulas or accounting adjustments not supported by the supplied definitions.
+
+14. Prefer directly stored canonical values where the business definitions identify them.
+
+15. For textual searches such as customer, supplier, product, item and name, prefer safe case-insensitive partial matching where appropriate.
+
+16. The user's spelling may be imperfect.
+
+Use reasonable partial matching, but never invent a stored value.
+
+17. For relative date requests such as today, yesterday, last week, last month or last 2 months, use the VERIFIED metric date field when one is supplied.
+
+18. If a VERIFIED metric specifies filters such as:
+
+sales.status = 'completed'
+
+apply those filters.
+
+19. Generate exactly ONE read-only SELECT or WITH query.
+
+20. Never generate INSERT, UPDATE, DELETE, DROP, ALTER, CREATE, TRUNCATE, REPLACE, GRANT or REVOKE.
+
+21. Return SQL only.
+
+22. Do not return markdown.
+
+23. Do not explain the SQL.
+
+24. Do not return comments.
+
+25. The application may append a safety LIMIT to the returned query, so produce SQL that remains valid with a trailing LIMIT.
+
+IMPORTANT TILE / UNIT RULE:
+
+If the supplied business semantics say:
+
+sales_items.quantity = physical pieces or tiles
+
+and:
+
+sales_items.price = price per piece OR price per SQM depending on product
+
+then NEVER universally calculate revenue as:
+
+sales_items.quantity * sales_items.price
+
+Use the canonical revenue field/formula supplied by the VERIFIED business definitions.
+
+IMPORTANT PROFIT RULE:
+
+If gross_profit is VERIFIED as:
+
+SUM(
+  sales_items.total -
+  (
+    sales_items.quantity *
+    sales_items.cost_price
+  )
+)
+
+use that exact business logic.
+
+Do NOT replace it with:
+
+SUM(
+  (
+    sales_items.price -
+    sales_items.cost_price
+  ) *
+  sales_items.quantity
+)
+
+because sales_items.price and sales_items.quantity may use different units.
+
+CUSTOMER DATABASE CONTEXT:
+
 ${compactCustomerSchema}`
       },
 
       {
         role: 'user',
-        content: question.trim()
+        content:
+          question.trim()
       }
     ]
   };
@@ -579,6 +1255,7 @@ ${compactCustomerSchema}`
           method: 'POST',
 
           headers: {
+
             'Authorization':
               `Bearer ${env.GROQ_API_KEY}`,
 
@@ -604,44 +1281,28 @@ ${compactCustomerSchema}`
 
 
   /*
-   * ONLY retry HTTP 429.
-   *
-   * Exactly one retry.
+   * Exactly one retry on Groq 429.
    */
 
-  if (response.status === 429) {
+  if (
+    response.status === 429
+  ) {
 
-    /*
-     * Consume response body before retrying.
-     */
     try {
       await response.text();
     } catch (e) {
-      // Ignore body-reading failure.
+      // Ignore.
     }
 
-    /*
-     * Wait approximately one second.
-     */
     await sleep(1000);
 
-
-    /*
-     * SECOND AND FINAL ATTEMPT
-     */
     response =
       await makeRequest();
   }
 
 
-  /*
-   * No further retries.
-   */
-
   return response;
 }
-
-
 /* =========================================================
  * WORKER
  * ========================================================= */
@@ -673,6 +1334,7 @@ export default {
     ];
 
     const corsHeaders = {
+
       'Access-Control-Allow-Methods':
         'GET, POST, PATCH, OPTIONS',
 
@@ -683,31 +1345,27 @@ export default {
         'no-store, no-cache, must-revalidate, proxy-revalidate'
     };
 
+
     if (
       origin &&
-      allowedOrigins.includes(
-        origin
-      )
+      allowedOrigins.includes(origin)
     ) {
+
       corsHeaders[
         'Access-Control-Allow-Origin'
       ] = origin;
     }
 
 
-    /*
-     * Browser preflight.
-     */
     if (
       request.method === 'OPTIONS'
     ) {
 
       if (
         origin &&
-        !allowedOrigins.includes(
-          origin
-        )
+        !allowedOrigins.includes(origin)
       ) {
+
         return new Response(
           null,
           {
@@ -716,11 +1374,13 @@ export default {
         );
       }
 
+
       return new Response(
         null,
         {
           status: 204,
-          headers: corsHeaders
+          headers:
+            corsHeaders
         }
       );
     }
@@ -741,6 +1401,7 @@ export default {
           status,
 
           headers: {
+
             'Content-Type':
               'application/json',
 
@@ -768,8 +1429,6 @@ export default {
 
     /* =====================================================
      * AI SCHEMA UPLOAD
-     *
-     * POST /api/ai/schema
      * ===================================================== */
 
     if (
@@ -783,24 +1442,29 @@ export default {
           'Authorization'
         );
 
+
       if (
         !authHeader ||
         !authHeader.startsWith(
           'Bearer '
         )
       ) {
+
         return errorResponse(
           'Missing API Key',
           401
         );
       }
 
+
       const rawKey =
         authHeader
           .slice(7)
           .trim();
 
+
       if (!rawKey) {
+
         return errorResponse(
           'Missing API Key',
           401
@@ -809,9 +1473,16 @@ export default {
 
 
       /*
-       * Existing customer-key behavior
-       * intentionally preserved.
+       * IMPORTANT:
+       *
+       * Existing installation currently stores the
+       * customer key directly in api_key_hash.
+       *
+       * Preserve this behavior for compatibility.
+       * Do not switch to hashApiKey() here without a
+       * proper migration of existing customer keys.
        */
+
       const customer =
         await env.DB
           .prepare(`
@@ -827,6 +1498,7 @@ export default {
 
 
       if (!customer) {
+
         return errorResponse(
           'Invalid API Key',
           401
@@ -838,6 +1510,7 @@ export default {
         customer.status !==
         'active'
       ) {
+
         return errorResponse(
           'Account is blocked',
           403
@@ -861,6 +1534,7 @@ export default {
           body.schema
         )
       ) {
+
         return errorResponse(
           'Invalid schema format',
           400
@@ -868,7 +1542,28 @@ export default {
       }
 
 
+      /*
+       * business_definitions is intentionally accepted
+       * as part of body.schema.
+       *
+       * Expected root structure:
+       *
+       * {
+       *   tables: {...},
+       *   relationships: [...],
+       *   business_definitions: {
+       *     metrics: {...},
+       *     columns: {...}
+       *   }
+       * }
+       *
+       * The Worker does NOT need a separate D1 column.
+       * The complete object remains inside schema_json.
+       */
+
+
       let schemaStr;
+
 
       try {
 
@@ -886,11 +1581,6 @@ export default {
       }
 
 
-      /*
-       * Maximum schema size:
-       * 500 KB
-       */
-
       const schemaBytes =
         new TextEncoder()
           .encode(
@@ -903,6 +1593,7 @@ export default {
         schemaBytes >
         500 * 1024
       ) {
+
         return errorResponse(
           'Schema size exceeds 500 KB',
           400
@@ -917,9 +1608,15 @@ export default {
 
 
       /*
-       * Full schema is stored in D1.
+       * Store the FULL rich schema.
        *
-       * We DO NOT compact it here.
+       * This includes:
+       *
+       * tables
+       * relationships
+       * business_definitions
+       *
+       * No customer business rows should be present.
        */
 
       await env.DB
@@ -955,8 +1652,10 @@ export default {
 
       return respondJSON({
         success: true,
+
         message:
           'Schema synced',
+
         schema_hash:
           schemaHash
       });
@@ -965,8 +1664,6 @@ export default {
 
     /* =====================================================
      * AI SCHEMA STATUS
-     *
-     * GET /api/ai/schema/status
      * ===================================================== */
 
     if (
@@ -987,6 +1684,7 @@ export default {
           'Bearer '
         )
       ) {
+
         return errorResponse(
           'Missing API Key',
           401
@@ -1001,6 +1699,7 @@ export default {
 
 
       if (!rawKey) {
+
         return errorResponse(
           'Missing API Key',
           401
@@ -1023,6 +1722,7 @@ export default {
 
 
       if (!customer) {
+
         return errorResponse(
           'Invalid API Key',
           401
@@ -1034,6 +1734,7 @@ export default {
         customer.status !==
         'active'
       ) {
+
         return errorResponse(
           'Account is blocked',
           403
@@ -1068,7 +1769,9 @@ export default {
 
 
       return respondJSON({
+
         success: true,
+
         configured: true,
 
         schema_hash:
@@ -1082,8 +1785,6 @@ export default {
 
     /* =====================================================
      * AI SQL GENERATION
-     *
-     * POST /api/ai/sql
      * ===================================================== */
 
     if (
@@ -1091,10 +1792,6 @@ export default {
       '/api/ai/sql' &&
       request.method === 'POST'
     ) {
-
-      /* ---------------------------------------------------
-       * Customer Authentication
-       * --------------------------------------------------- */
 
       const authHeader =
         request.headers.get(
@@ -1108,6 +1805,7 @@ export default {
           'Bearer '
         )
       ) {
+
         return errorResponse(
           'Missing API Key',
           401
@@ -1122,6 +1820,7 @@ export default {
 
 
       if (!rawKey) {
+
         return errorResponse(
           'Missing API Key',
           401
@@ -1145,6 +1844,7 @@ export default {
 
 
       if (!customer) {
+
         return errorResponse(
           'Invalid API Key',
           401
@@ -1156,6 +1856,7 @@ export default {
         customer.status !==
         'active'
       ) {
+
         return errorResponse(
           'Account is blocked',
           403
@@ -1163,9 +1864,9 @@ export default {
       }
 
 
-      /* ---------------------------------------------------
-       * Monthly Usage Limit
-       * --------------------------------------------------- */
+      /* ===================================================
+       * MONTHLY LIMIT
+       * =================================================== */
 
       const startOfMonth =
         getKarachiStartOfMonth();
@@ -1202,9 +1903,9 @@ export default {
       }
 
 
-      /* ---------------------------------------------------
-       * Load Full Customer Schema
-       * --------------------------------------------------- */
+      /* ===================================================
+       * LOAD FULL SCHEMA + BUSINESS DEFINITIONS
+       * =================================================== */
 
       const schemaRecord =
         await env.DB
@@ -1236,6 +1937,7 @@ export default {
 
       let customerSchema;
 
+
       try {
 
         customerSchema =
@@ -1252,14 +1954,51 @@ export default {
       }
 
 
-      /* ---------------------------------------------------
-       * COMPACT SCHEMA
-       * ---------------------------------------------------
+      /*
+       * ===================================================
+       * BASIC STORED SCHEMA VALIDATION
+       * ===================================================
        *
-       * Full D1 schema remains unchanged.
+       * We require tables because without the actual DB
+       * structure Groq must not generate SQL.
+       */
+
+      if (
+        !customerSchema ||
+        typeof customerSchema !==
+        'object' ||
+        Array.isArray(customerSchema) ||
+        !customerSchema.tables ||
+        typeof customerSchema.tables !==
+        'object'
+      ) {
+
+        return errorResponse(
+          'Stored database schema is invalid',
+          500
+        );
+      }
+
+
+      /* ===================================================
+       * COMPACT RICH SCHEMA + SEMANTIC DEFINITIONS
+       * ===================================================
        *
-       * Only this compact representation goes
-       * to Groq.
+       * compactSchema() now extracts:
+       *
+       * - tables
+       * - column types
+       * - PKs
+       * - unique keys
+       * - FKs
+       * - VERIFIED metrics
+       * - DERIVED metrics
+       * - AMBIGUOUS metrics
+       * - column meanings
+       * - business warnings
+       *
+       * Full JSON remains in D1.
+       * Only this compact representation goes to Groq.
        */
 
       const compactCustomerSchema =
@@ -1279,9 +2018,9 @@ export default {
       }
 
 
-      /* ---------------------------------------------------
-       * User Question
-       * --------------------------------------------------- */
+      /* ===================================================
+       * QUESTION
+       * =================================================== */
 
       const body =
         await request
@@ -1309,24 +2048,29 @@ export default {
       }
 
 
-      /* ---------------------------------------------------
+      /*
+       * Keep an upper bound on question size.
+       *
+       * Normal POS questions are tiny. This prevents a
+       * client from unnecessarily inflating Groq context.
+       */
+
+      if (
+        question.trim().length > 4000
+      ) {
+
+        return errorResponse(
+          'Question is too long.',
+          400
+        );
+      }
+
+
+      /* ===================================================
        * GROQ
-       * --------------------------------------------------- */
+       * =================================================== */
 
       try {
-
-        /*
-         * callGroq:
-         *
-         * attempt 1
-         *
-         * if 429:
-         * wait 1 second
-         *
-         * attempt 2
-         *
-         * STOP.
-         */
 
         const groqRes =
           await callGroq(
@@ -1336,27 +2080,18 @@ export default {
           );
 
 
-        /*
-         * Read response once.
-         */
-
         const groqRaw =
           await groqRes.text();
 
 
-        /* -------------------------------------------------
-         * Groq still rate limited after retry
-         * ------------------------------------------------- */
+        /*
+         * Still rate limited after the ONE retry performed
+         * inside callGroq().
+         */
 
         if (
           groqRes.status === 429
         ) {
-
-          /*
-           * Internal diagnostic only.
-           * Do NOT expose Groq organization,
-           * token limits, etc. to customer.
-           */
 
           console.error(
             'Groq rate limit remained after retry',
@@ -1379,18 +2114,14 @@ export default {
         }
 
 
-        /* -------------------------------------------------
-         * Other Groq HTTP Error
-         * ------------------------------------------------- */
+        /*
+         * Any other upstream Groq error.
+         *
+         * Do NOT expose raw Groq response because it may
+         * contain internal account / organization details.
+         */
 
         if (!groqRes.ok) {
-
-          /*
-           * We log only safe metadata.
-           *
-           * Do not return raw Groq response
-           * to customer.
-           */
 
           console.error(
             'Groq API request failed',
@@ -1413,11 +2144,12 @@ export default {
         }
 
 
-        /* -------------------------------------------------
-         * Parse Groq JSON
-         * ------------------------------------------------- */
+        /* =================================================
+         * PARSE GROQ RESPONSE
+         * ================================================= */
 
         let groqData;
+
 
         try {
 
@@ -1445,10 +2177,6 @@ export default {
         }
 
 
-        /* -------------------------------------------------
-         * Extract SQL
-         * ------------------------------------------------- */
-
         const sql =
           groqData
             ?.choices?.[0]
@@ -1466,15 +2194,24 @@ export default {
 
         const usage =
           groqData?.usage || {
+
             prompt_tokens: 0,
+
             completion_tokens: 0,
+
             total_tokens: 0
           };
 
 
-        /* -------------------------------------------------
-         * No SQL generated
-         * ------------------------------------------------- */
+        /*
+         * No SQL was generated.
+         *
+         * This can happen when:
+         *
+         * - request is not a DB question
+         * - requested metric is intentionally ambiguous
+         * - model cannot safely construct SQL
+         */
 
         if (!sql) {
 
@@ -1482,16 +2219,7 @@ export default {
             'Groq returned no SQL',
             {
               finish_reason:
-                finishReason,
-
-              choices_count:
-                Array.isArray(
-                  groqData?.choices
-                )
-                  ? groqData
-                    .choices
-                    .length
-                  : 0
+                finishReason
             }
           );
 
@@ -1508,9 +2236,9 @@ export default {
         }
 
 
-        /* -------------------------------------------------
-         * SQL Safety Validation
-         * ------------------------------------------------- */
+        /* =================================================
+         * SQL VALIDATION
+         * ================================================= */
 
         const validation =
           validateSql(sql);
@@ -1519,6 +2247,15 @@ export default {
         if (
           !validation.isValid
         ) {
+
+          /*
+           * Log only safe metadata.
+           *
+           * Do NOT store:
+           * - question
+           * - generated SQL
+           * - business data
+           */
 
           await env.DB
             .prepare(`
@@ -1552,9 +2289,9 @@ export default {
         }
 
 
-        /* -------------------------------------------------
-         * Successful Request Log
-         * ------------------------------------------------- */
+        /* =================================================
+         * LOG SUCCESS
+         * ================================================= */
 
         await env.DB
           .prepare(`
@@ -1579,6 +2316,7 @@ export default {
             )
           `)
           .bind(
+
             customer.id,
 
             getKarachiDateStr(),
@@ -1594,30 +2332,29 @@ export default {
           .run();
 
 
-        /* -------------------------------------------------
-         * SUCCESS
+        /*
+         * IMPORTANT:
          *
-         * Worker returns SQL ONLY.
+         * Worker returns SQL only.
          *
-         * Laravel executes locally through
-         * ai_readonly.
-         * ------------------------------------------------- */
+         * Worker NEVER connects to or executes against the
+         * customer's local POS database.
+         *
+         * Laravel receives this SQL, independently validates
+         * it again, then executes through ai_readonly.
+         *
+         * Query results never need to be sent back to Groq.
+         */
 
         return respondJSON({
           success: true,
+
           sql:
             validation.cleanSql
         });
 
 
       } catch (e) {
-
-        /*
-         * Network / runtime / unexpected error.
-         *
-         * Internal error detail is intentionally
-         * NOT returned to customer.
-         */
 
         console.error(
           'AI generation exception',
@@ -1643,9 +2380,25 @@ export default {
     }
 
 
+    /*
+     * =====================================================
+     *
+     * PART 3 CONTINUES HERE
+     *
+     * DO NOT CLOSE:
+     *
+     *   async fetch(...)
+     *   export default
+     *
+     * yet.
+     *
+     * Part 3 starts with ADMIN LOGIN and finishes the file.
+     *
+     * =====================================================
+     */
     /* =====================================================
-     * ADMIN LOGIN
-     * ===================================================== */
+ * ADMIN LOGIN
+ * ===================================================== */
 
     if (
       pathname ===
@@ -1912,7 +2665,6 @@ export default {
                 })
               )
               .reverse()
-
         });
       }
 
@@ -2069,14 +2821,20 @@ export default {
         }
 
 
+        /*
+         * IMPORTANT:
+         *
+         * Current production compatibility:
+         * the generated raw customer key is stored in
+         * api_key_hash.
+         *
+         * Do not change this to SHA-256 here until the
+         * existing customer-key migration is performed.
+         */
+
         const rawKey =
           generateRandomKey();
 
-
-        /*
-         * Existing raw-key storage behavior
-         * intentionally preserved.
-         */
 
         await env.DB
           .prepare(`
@@ -2154,9 +2912,9 @@ export default {
         }
 
 
-        /* -----------------------------------------------
-         * Customer Detail
-         * ----------------------------------------------- */
+        /* ===============================================
+         * GET CUSTOMER
+         * =============================================== */
 
         if (
           request.method === 'GET'
@@ -2257,14 +3015,13 @@ export default {
 
             daily_usage:
               dUsage.results || []
-
           });
         }
 
 
-        /* -----------------------------------------------
-         * Update Customer
-         * ----------------------------------------------- */
+        /* ===============================================
+         * UPDATE CUSTOMER
+         * =============================================== */
 
         if (
           request.method === 'PATCH'
@@ -2422,46 +3179,6 @@ export default {
 
 
       /* ===================================================
-       * REQUEST LOGS
-       * =================================================== */
-
-      const requestsMatch =
-        pathname.match(
-          /^\/api\/admin\/customers\/(\d+)\/requests$/
-        );
-
-      if (
-        requestsMatch &&
-        request.method === 'GET'
-      ) {
-        try {
-          const id = requestsMatch[1];
-          const cust = await env.DB.prepare('SELECT id FROM customers WHERE id=?').bind(id).first();
-          if (!cust) return errorResponse('Not found', 404);
-
-          const urlParams = new URLSearchParams(url.search);
-          const page = parseInt(urlParams.get('page') || '1');
-          const limit = 20;
-          const offset = (page - 1) * limit;
-
-          const totalResult = await env.DB.prepare('SELECT COUNT(*) as count FROM request_logs WHERE customer_id=?').bind(id).first();
-          const total = totalResult?.count || 0;
-
-          const requestsList = await env.DB.prepare('SELECT rowid as id, request_date, request_time, input_tokens, output_tokens, total_tokens, status FROM request_logs WHERE customer_id=? ORDER BY rowid DESC LIMIT ? OFFSET ?').bind(id, limit, offset).all();
-
-          return respondJSON({
-            requests: requestsList.results || [],
-            total,
-            page,
-            totalPages: Math.ceil(total / limit)
-          });
-        } catch (e) {
-          return respondJSON({ success: false, error: e.message || 'Unknown error' }, 500);
-        }
-      }
-
-
-      /* ===================================================
        * USAGE
        * =================================================== */
 
@@ -2493,6 +3210,14 @@ export default {
           );
         }
 
+
+        /*
+         * Inclusive date range:
+         *
+         * today = today
+         * 7     = today + previous 6 days
+         * 30    = today + previous 29 days
+         */
 
         let since =
           getKarachiDateStr();
@@ -2654,7 +3379,6 @@ export default {
 
           daily:
             daily.results || []
-
         });
       }
     }
