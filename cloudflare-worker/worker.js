@@ -2434,26 +2434,30 @@ export default {
         requestsMatch &&
         request.method === 'GET'
       ) {
-        const id = requestsMatch[1];
-        const cust = await env.DB.prepare('SELECT id FROM customers WHERE id=?').bind(id).first();
-        if (!cust) return errorResponse('Not found', 404);
+        try {
+          const id = requestsMatch[1];
+          const cust = await env.DB.prepare('SELECT id FROM customers WHERE id=?').bind(id).first();
+          if (!cust) return errorResponse('Not found', 404);
 
-        const urlParams = new URLSearchParams(url.search);
-        const page = parseInt(urlParams.get('page') || '1');
-        const limit = 20;
-        const offset = (page - 1) * limit;
+          const urlParams = new URLSearchParams(url.search);
+          const page = parseInt(urlParams.get('page') || '1');
+          const limit = 20;
+          const offset = (page - 1) * limit;
 
-        const totalResult = await env.DB.prepare('SELECT COUNT(*) as count FROM request_logs WHERE customer_id=?').bind(id).first();
-        const total = totalResult?.count || 0;
+          const totalResult = await env.DB.prepare('SELECT COUNT(*) as count FROM request_logs WHERE customer_id=?').bind(id).first();
+          const total = totalResult?.count || 0;
 
-        const requestsList = await env.DB.prepare('SELECT id, request_date, request_time, input_tokens, output_tokens, total_tokens, status FROM request_logs WHERE customer_id=? ORDER BY id DESC LIMIT ? OFFSET ?').bind(id, limit, offset).all();
+          const requestsList = await env.DB.prepare('SELECT rowid as id, request_date, request_time, input_tokens, output_tokens, total_tokens, status FROM request_logs WHERE customer_id=? ORDER BY rowid DESC LIMIT ? OFFSET ?').bind(id, limit, offset).all();
 
-        return respondJSON({
-          requests: requestsList.results || [],
-          total,
-          page,
-          totalPages: Math.ceil(total / limit)
-        });
+          return respondJSON({
+            requests: requestsList.results || [],
+            total,
+            page,
+            totalPages: Math.ceil(total / limit)
+          });
+        } catch (e) {
+          return respondJSON({ success: false, error: e.message || 'Unknown error' }, 500);
+        }
       }
 
 
