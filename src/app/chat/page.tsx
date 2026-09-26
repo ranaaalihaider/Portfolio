@@ -64,48 +64,121 @@ export default function ChatPage() {
 
   if (!isAuthenticated) {
     return (
-      <div className="min-h-screen bg-pink-50 flex flex-col items-center justify-center p-4 sm:p-8 font-sans">
-        <div className="w-full max-w-md bg-white rounded-3xl shadow-xl border border-pink-100 p-8 text-center space-y-6">
-          <div className="flex justify-center">
-            <Sparkles className="text-pink-400 animate-pulse" size={48} />
-          </div>
-          <h1 className="text-2xl font-bold text-pink-500">
-            AI chat screen for one and only Aimen Shhazad by a rude developer
-          </h1>
-          <p className="text-gray-500 text-sm">Please verify your identity to access.</p>
+      <div className="min-h-screen bg-gradient-to-br from-pink-50 to-rose-100 flex flex-col items-center justify-center p-4 sm:p-8 font-sans overflow-hidden relative">
+        {/* Background decorative elements */}
+        <motion.div 
+          animate={{ y: [0, -20, 0], opacity: [0.5, 0.8, 0.5] }} 
+          transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+          className="absolute top-10 left-10 text-pink-200/50 pointer-events-none"
+        >
+          <Sparkles size={80} />
+        </motion.div>
+        
+        <motion.div 
+          animate={{ y: [0, 20, 0], opacity: [0.3, 0.6, 0.3] }} 
+          transition={{ duration: 5, repeat: Infinity, ease: "easeInOut", delay: 1 }}
+          className="absolute bottom-10 right-10 text-rose-200/50 pointer-events-none"
+        >
+          <Sparkles size={120} />
+        </motion.div>
 
-          <form onSubmit={handleAuth} className="space-y-4">
-            <div>
+        <motion.div 
+          initial={{ opacity: 0, scale: 0.9, y: 20 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          transition={{ duration: 0.5, type: "spring", bounce: 0.4 }}
+          className="w-full max-w-md bg-white/80 backdrop-blur-xl rounded-[2.5rem] shadow-2xl shadow-pink-200/50 border border-white p-8 sm:p-10 text-center relative z-10"
+        >
+          <motion.div 
+            initial={{ scale: 0 }}
+            animate={{ scale: 1, rotate: [0, -10, 10, -10, 0] }}
+            transition={{ delay: 0.2, duration: 0.8, type: "spring" }}
+            className="flex justify-center mb-6"
+          >
+            <div className="w-24 h-24 bg-gradient-to-tr from-pink-400 to-rose-300 rounded-full flex items-center justify-center shadow-lg shadow-pink-300/50">
+              <Sparkles className="text-white" size={40} />
+            </div>
+          </motion.div>
+          
+          <motion.h1 
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.4 }}
+            className="text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-pink-500 to-rose-400 mb-2"
+          >
+            For Aimen Only 💕
+          </motion.h1>
+          
+          <motion.p 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.5 }}
+            className="text-gray-500 text-sm mb-8 font-medium leading-relaxed"
+          >
+            By a rude developer 😒<br/>Please verify it's really you to unlock the chat.
+          </motion.p>
+
+          <form onSubmit={handleAuth} className="space-y-5">
+            <motion.div
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 0.6 }}
+            >
+              <div className="text-left mb-1.5 ml-2 text-[10px] font-bold text-pink-400 uppercase tracking-widest">Secret Question 1</div>
               <input
                 type="text"
-                placeholder="Enter your house number"
+                placeholder="What is your House Number?"
                 value={houseNumber}
                 onChange={(e) => setHouseNumber(e.target.value)}
-                className="w-full p-4 bg-pink-50 border border-pink-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-transparent text-gray-700 placeholder-pink-300 transition-all text-center"
+                className="w-full p-4 bg-white border-2 border-pink-100 rounded-2xl focus:outline-none focus:ring-4 focus:ring-pink-400/20 focus:border-pink-400 text-gray-700 placeholder-pink-200 transition-all font-medium text-center text-lg"
                 required
               />
-            </div>
-            <div>
+            </motion.div>
+            
+            <motion.div
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 0.7 }}
+            >
+              <div className="text-left mb-1.5 ml-2 text-[10px] font-bold text-pink-400 uppercase tracking-widest">Secret Question 2</div>
               <input
                 type="text"
-                placeholder="Enter your street number"
+                placeholder="What is your Street Number?"
                 value={streetNumber}
                 onChange={(e) => setStreetNumber(e.target.value)}
-                className="w-full p-4 bg-pink-50 border border-pink-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-transparent text-gray-700 placeholder-pink-300 transition-all text-center"
+                className="w-full p-4 bg-white border-2 border-pink-100 rounded-2xl focus:outline-none focus:ring-4 focus:ring-pink-400/20 focus:border-pink-400 text-gray-700 placeholder-pink-200 transition-all font-medium text-center text-lg"
                 required
               />
-            </div>
+            </motion.div>
 
-            {authError && <p className="text-red-400 text-sm font-medium">{authError}</p>}
+            <AnimatePresence>
+              {authError && (
+                <motion.p 
+                  initial={{ opacity: 0, height: 0, y: -10 }}
+                  animate={{ opacity: 1, height: 'auto', y: 0 }}
+                  exit={{ opacity: 0, height: 0 }}
+                  className="text-red-500 text-sm font-semibold bg-red-50 py-3 px-4 rounded-2xl border border-red-100"
+                >
+                  {authError}
+                </motion.p>
+              )}
+            </AnimatePresence>
 
-            <button
+            <motion.button
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.8 }}
+              whileHover={{ scale: 1.02, boxShadow: "0 20px 25px -5px rgb(244 114 182 / 0.25)" }}
+              whileTap={{ scale: 0.98 }}
               type="submit"
-              className="w-full p-4 bg-gradient-to-r from-pink-400 to-rose-400 text-white rounded-xl hover:shadow-lg hover:scale-[1.02] active:scale-95 transition-all font-bold tracking-wide"
+              className="w-full py-4 mt-6 bg-gradient-to-r from-pink-500 to-rose-400 text-white font-bold rounded-2xl shadow-lg shadow-pink-300/50 transition-all relative overflow-hidden group text-lg tracking-wide"
             >
-              Access Chat
-            </button>
+              <span className="relative z-10 flex items-center justify-center gap-2">
+                Unlock Chat
+              </span>
+              <div className="absolute inset-0 h-full w-full bg-gradient-to-r from-rose-400 to-pink-500 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+            </motion.button>
           </form>
-        </div>
+        </motion.div>
       </div>
     );
   }
