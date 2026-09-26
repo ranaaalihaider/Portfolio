@@ -35,7 +35,7 @@ export async function POST(req: Request) {
         'Authorization': `Bearer ${GROQ_API_KEY}`
       },
       body: JSON.stringify({
-        model: 'llama-3.3-70b-versatile', // using Groq's newest flagship model
+        model: 'openai/gpt-oss-20b', // confirmed working model
         messages: messages
       })
     });
