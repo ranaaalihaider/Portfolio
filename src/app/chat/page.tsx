@@ -184,8 +184,8 @@ export default function ChatPage() {
   }
 
   return (
-    <div className="min-h-screen bg-pink-50 flex flex-col items-center justify-center p-4 sm:p-8 font-sans">
-      <div className="w-full max-w-2xl bg-white rounded-3xl shadow-xl border border-pink-100 overflow-hidden flex flex-col h-[85vh]">
+    <div className="h-[100dvh] bg-pink-50 flex flex-col items-center justify-center sm:p-4 md:p-8 font-sans overflow-hidden">
+      <div className="w-full h-full max-w-2xl bg-white sm:rounded-[2.5rem] shadow-xl sm:border border-pink-100 flex flex-col overflow-hidden">
         {/* Header */}
         <div className="bg-gradient-to-r from-pink-400 to-rose-400 p-6 text-white flex items-center justify-center gap-3 shadow-md z-10 relative">
           <div className="absolute inset-0 bg-white/10 backdrop-blur-sm opacity-50"></div>
