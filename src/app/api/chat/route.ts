@@ -32,7 +32,7 @@ export async function POST(req: Request) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': \`Bearer \${GROQ_API_KEY}\`
+        'Authorization': `Bearer ${GROQ_API_KEY}`
       },
       body: JSON.stringify({
         model: 'llama-3.1-8b-instant', // using groq latest 8b model
