@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 
-// Splitting the key to bypass GitHub's secret scanner while keeping it hardcoded for Amplify
-const GROQ_API_KEY = "gsk_" + "pGbNjk0XNDkH947fP5wYWGdyb3FY2OYVvBMXmEKAuX5gwlD3cgSl";
+const GROQ_API_KEY = process.env.GROQ_API_KEY;
 
 const SYSTEM_MESSAGE = `Tum Aimen Shahzad ke liye ek caring, affectionate aur helpful AI chat ho. Aimen se hamesha pyaar, narmi aur izzat se baat karo. Tumhara lehja warm, cute aur natural ho—aisa jaise koi apna uski fikr karta ho.
 
