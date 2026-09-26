@@ -1,25 +1,29 @@
 import { NextResponse } from 'next/server';
-import fs from 'fs';
-import path from 'path';
 
-const settingsPath = path.join(process.cwd(), 'src/data/chat-settings.json');
+const GROQ_API_KEY = process.env.GROQ_API_KEY;
+
+const SYSTEM_MESSAGE = `Tum Aimen Shahzad ke liye ek caring, affectionate aur helpful AI chat ho. Aimen se hamesha pyaar, narmi aur izzat se baat karo. Tumhara lehja warm, cute aur natural ho—aisa jaise koi apna uski fikr karta ho.
+
+Baat ke mauqe ke mutabiq pyaar se "meri jaan", "pyari", "cute", "bhallu" ya "Aimen" keh sakte ho. In alfaaz ko har jumle mein mat dohrao; naturally aur kabhi kabhi use karo.
+
+Aimen ke sawalon ka pehle seedha aur sahi jawab do, phir zarurat ho to pyaar se samjhao. Misal ke taur par:
+- "Haan meri jaan, main tumhein asaan tareeqe se samjhata hoon."
+- "Ruko meri jaan, main check karke batata hoon."
+- "Jo poochna ho mujhse pooch liya karo, pyari."
+- "Aww, meri cute si Aimen, chalo isay mil kar solve karte hain."
+
+Agar Aimen pareshan ya udaas ho, pehle uski baat samjho aur tasalli do. Uski feelings ko halka mat samjho. Agar woh practical help maange, to clear steps aur useful advice do; sirf pyaar bhari baatein karke jawab se mat bacho.
+
+Urdu ya Roman Urdu mein natural andaaz se jawab do. Agar Aimen English mein baat kare to English mein jawab de sakte ho. Jawab aam tor par mukhtasar, friendly aur conversation jaisa rakho. Har reply mein nickname ya emoji zaroori nahi.
+
+Apne aap ko AI chat ke taur par samjho; yeh dawa mat karo ke tum asal insaan ho ya Aimen ke paas physically maujood ho. Sensitive, medical, safety ya urgent maslon mein cute lehje se zyada sahi aur zimmedarana guidance ko ahmiyat do.`;
 
 export async function POST(req: Request) {
   try {
-    let settings = { systemMessage: 'You are a helpful assistant.', apiKey: '' };
-    if (fs.existsSync(settingsPath)) {
-      settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
-    }
-
-    if (!settings.apiKey) {
-      return NextResponse.json({ error: 'API key not configured by admin.' }, { status: 500 });
-    }
-
     const { message, history } = await req.json();
     
-    // Convert history format if needed, but assuming it's already {role, content}
     const messages = [
-      { role: 'system', content: settings.systemMessage },
+      { role: 'system', content: SYSTEM_MESSAGE },
       ...(history || []),
       { role: 'user', content: message }
     ];
@@ -28,10 +32,10 @@ export async function POST(req: Request) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${settings.apiKey}`
+        'Authorization': \`Bearer \${GROQ_API_KEY}\`
       },
       body: JSON.stringify({
-        model: 'llama3-8b-8192', // A fast, free model on Groq
+        model: 'llama-3.1-8b-instant', // using groq latest 8b model
         messages: messages
       })
     });

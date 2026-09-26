@@ -7,6 +7,10 @@ export default function ChatPage() {
   const [messages, setMessages] = useState<{role: string, content: string}[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [houseNumber, setHouseNumber] = useState('');
+  const [streetNumber, setStreetNumber] = useState('');
+  const [authError, setAuthError] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -46,6 +50,65 @@ export default function ChatPage() {
     }
     setLoading(false);
   };
+
+  const handleAuth = (e: React.FormEvent) => {
+    e.preventDefault();
+    // basic base64 hashing as requested: MTU= (15), MjE2 (216)
+    if (btoa(houseNumber.trim()) === 'MTU=' && btoa(streetNumber.trim()) === 'MjE2') {
+      setIsAuthenticated(true);
+      setAuthError('');
+    } else {
+      setAuthError('Incorrect details. Only Aimen is allowed!');
+    }
+  };
+
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen bg-pink-50 flex flex-col items-center justify-center p-4 sm:p-8 font-sans">
+        <div className="w-full max-w-md bg-white rounded-3xl shadow-xl border border-pink-100 p-8 text-center space-y-6">
+          <div className="flex justify-center">
+            <Sparkles className="text-pink-400 animate-pulse" size={48} />
+          </div>
+          <h1 className="text-2xl font-bold text-pink-500">
+            AI chat screen for one and only Aimen Shhazad by a rude developer
+          </h1>
+          <p className="text-gray-500 text-sm">Please verify your identity to access.</p>
+
+          <form onSubmit={handleAuth} className="space-y-4">
+            <div>
+              <input
+                type="text"
+                placeholder="Enter your house number"
+                value={houseNumber}
+                onChange={(e) => setHouseNumber(e.target.value)}
+                className="w-full p-4 bg-pink-50 border border-pink-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-transparent text-gray-700 placeholder-pink-300 transition-all text-center"
+                required
+              />
+            </div>
+            <div>
+              <input
+                type="text"
+                placeholder="Enter your street number"
+                value={streetNumber}
+                onChange={(e) => setStreetNumber(e.target.value)}
+                className="w-full p-4 bg-pink-50 border border-pink-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-transparent text-gray-700 placeholder-pink-300 transition-all text-center"
+                required
+              />
+            </div>
+
+            {authError && <p className="text-red-400 text-sm font-medium">{authError}</p>}
+
+            <button
+              type="submit"
+              className="w-full p-4 bg-gradient-to-r from-pink-400 to-rose-400 text-white rounded-xl hover:shadow-lg hover:scale-[1.02] active:scale-95 transition-all font-bold tracking-wide"
+            >
+              Access Chat
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-pink-50 flex flex-col items-center justify-center p-4 sm:p-8 font-sans">
