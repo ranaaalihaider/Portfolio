@@ -36,7 +36,7 @@ export async function POST(req: Request) {
         'Authorization': `Bearer ${GROQ_API_KEY}`
       },
       body: JSON.stringify({
-        model: 'llama3-8b-8192', // using a universally available model
+        model: 'mixtral-8x7b-32768', // using a highly reliable, non-deprecated model
         messages: messages
       })
     });
