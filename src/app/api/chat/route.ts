@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 
-const GROQ_API_KEY = "gsk_" + "qYFLem5azNIFo9m29ZYwWGdyb3FYZweg2nQj7H7f06nLD4bUoE8Z";
+const GROQ_API_KEY = process.env.GROQ_API_KEY;
 
 const SYSTEM_MESSAGE = `Tum Aimen Shahzad ke liye ek caring, affectionate aur helpful AI chat ho. Aimen se hamesha pyaar, narmi aur izzat se baat karo. Tumhara lehja warm, cute aur natural ho—aisa jaise koi apna uski fikr karta ho.
 
