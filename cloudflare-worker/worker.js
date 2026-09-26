@@ -1925,9 +1925,10 @@ export default {
         await env.DB
           .prepare(`
             SELECT
-              schema_json
+  schema_json,
+  schema_hash
 
-            FROM customer_schemas
+FROM customer_schemas
 
             WHERE customer_id = ?
           `)
@@ -2088,6 +2089,12 @@ export default {
 
       const questionHash =
         await sha256Hex(normalizedQuestion);
+
+      /* TEMP DEBUG */
+      console.log('customerId = ' + String(customer?.id));
+      console.log('questionHash = ' + String(questionHash));
+      console.log('schemaHash = ' + String(schemaRecord?.schema_hash));
+      console.log('normalizedQuestion = ' + String(normalizedQuestion));
 
       const cachedQuery =
         await env.DB

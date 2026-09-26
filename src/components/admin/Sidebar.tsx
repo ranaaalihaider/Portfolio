@@ -1,7 +1,7 @@
 'use client';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { LayoutDashboard, Users, Activity, LogOut } from 'lucide-react';
+import { LayoutDashboard, Users, Activity, LogOut, MessageSquare } from 'lucide-react';
 
 export default function Sidebar() {
   const pathname = usePathname();
@@ -16,6 +16,7 @@ export default function Sidebar() {
     { name: 'Dashboard', href: '/admin', icon: LayoutDashboard },
     { name: 'Customers', href: '/admin/customers', icon: Users },
     { name: 'Usage', href: '/admin/usage', icon: Activity },
+    { name: 'Chat Settings', href: '/admin/chat-settings', icon: MessageSquare },
   ];
 
   return (
