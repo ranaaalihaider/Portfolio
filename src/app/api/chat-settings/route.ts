@@ -21,7 +21,8 @@ export async function POST(req: Request) {
     const body = await req.json();
     fs.writeFileSync(settingsPath, JSON.stringify(body, null, 2), 'utf8');
     return NextResponse.json({ success: true });
-  } catch (error) {
-    return NextResponse.json({ error: 'Failed to save settings' }, { status: 500 });
+  } catch (error: any) {
+    console.error('Settings save error:', error);
+    return NextResponse.json({ error: 'Failed to save settings: ' + error.message }, { status: 500 });
   }
 }

@@ -31,10 +31,11 @@ export default function ChatSettings() {
       if (res.ok) {
         setMessage('Settings saved successfully!');
       } else {
-        setMessage('Failed to save settings.');
+        const errData = await res.json().catch(() => ({}));
+        setMessage(errData.error || 'Failed to save settings.');
       }
-    } catch (err) {
-      setMessage('Error saving settings.');
+    } catch (err: any) {
+      setMessage('Error saving settings: ' + err.message);
     }
     setSaving(false);
   };
