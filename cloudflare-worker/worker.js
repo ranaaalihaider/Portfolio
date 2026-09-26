@@ -1257,6 +1257,30 @@ ${compactCustomerSchema}`
     ]
   };
 
+  /* ===================================================
+ * TEMP GROQ PROMPT DEBUG
+ * =================================================== */
+
+  console.log(
+    'FINAL GROQ REQUEST = ' +
+    JSON.stringify(requestBody, null, 2)
+  );
+
+  console.log(
+    'SYSTEM PROMPT CHARS = ' +
+    requestBody.messages[0].content.length
+  );
+
+  console.log(
+    'DATABASE CONTEXT CHARS = ' +
+    compactCustomerSchema.length
+  );
+
+  console.log(
+    'USER QUESTION CHARS = ' +
+    question.trim().length
+  );
+
 
   const makeRequest =
     async () => {
@@ -2287,6 +2311,34 @@ FROM customer_schemas
 
             total_tokens: 0
           };
+
+
+        /* =================================================
+* GROQ PROMPT CACHE DEBUG
+* ================================================= */
+
+        const cachedTokens =
+          usage?.prompt_tokens_details?.cached_tokens || 0;
+
+        const promptTokens =
+          usage?.prompt_tokens || 0;
+
+        const uncachedTokens =
+          Math.max(0, promptTokens - cachedTokens);
+
+        const cacheHitPercent =
+          promptTokens > 0
+            ? ((cachedTokens / promptTokens) * 100).toFixed(2)
+            : '0.00';
+
+        console.log('GROQ CACHE DEBUG', {
+          prompt_tokens: promptTokens,
+          cached_tokens: cachedTokens,
+          uncached_tokens: uncachedTokens,
+          completion_tokens: usage?.completion_tokens || 0,
+          total_tokens: usage?.total_tokens || 0,
+          cache_hit_percent: cacheHitPercent + '%'
+        });
 
 
         /*
